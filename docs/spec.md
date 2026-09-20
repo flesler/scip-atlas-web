@@ -1,16 +1,119 @@
 # scip-atlas-web spec
 
-Fully local SPA. Not an indexer. Not git. Not LLM. Not a Node/Python server.
+Fully local SPA + a **Node pack CLI**. Not an indexer. Not git. Not LLM. Not an HTTP API for the UI.
 
-Sibling: [scip-atlas](https://github.com/flesler/scip-atlas) writes `atlas.db` and `index.slim.db`. [scip-cli](https://github.com/flesler/scip-cli) writes full `index.db`.
+Sibling: [scip-atlas](https://github.com/flesler/scip-atlas) writes `atlas.db` from **full** `index.db`. [scip-cli](https://github.com/flesler/scip-cli) writes that full index (includes source). This repo owns **slim+merge** into one `explorer.db` for the viewer.
 
-Users open **one HTML file**, drop SQLite DBs, explore. DBs never leave the machine.
+Users open **one HTML file**, drop **one** SQLite file, explore. Bytes never leave the machine.
 
 ## Product
 
 Accordion tree + FTS + file panel (defined symbols, **deps**, **rdeps**). Click a path to jump (expand ancestors + select). Same for search hits.
 
-## Stack
+## Two artifacts
+
+| | Role |
+| --- | --- |
+| SPA | `src/**/*.ts` → one inlined HTML (GitHub Pages / `file://`) |
+| Pack CLI | `bin/*.ts` (Node) → `explorer.db` from full index + atlas |
+
+The CLI is **not** inlined into the HTML. WASM inlining is SPA-only.
+
+---
+
+## Pack CLI (`bin/pack.ts`)
+
+Port of atlas `scip_atlas/slim_index.py` **plus** merge of the sidecar. Reference that Python while packing; once this CLI works, **delete slim from atlas** (see atlas spec).
+
+### Command
+
+```text
+npx tsx bin/pack.ts
+  [--index PATH] [--atlas PATH] [--output PATH]
+  [--repo PATH]
+```
+
+Defaults: git root of cwd → scip-cli cache slug (same algorithm as atlas `project_paths.py` — copy the few functions, do not `import scip_cli`). `--index` = cache `index.db` (full). `--atlas` = `atlas.db` beside it. `--output` = `explorer.db` beside atlas.
+
+Checkpoint atlas WAL before copy (`PRAGMA wal_checkpoint(TRUNCATE)` on a write connection, then read).
+
+Overwrite `--output` if it exists. Source ≠ output.
+
+Print sizes: `index.db: X MB + atlas.db: Y MB -> explorer.db: Z MB`.
+
+### Config → SQL (same pattern as Python)
+
+**NEVER** hand-write `CREATE TABLE` / `INSERT … SELECT` / `CREATE INDEX` strings in the pack path. Static tuples; derive SQL.
+
+Python to port (`slim_index.py`):
+
+| Python | TypeScript |
+| --- | --- |
+| `SlimIndexTable(name, columns)` | `PackTable` |
+| `SlimIndexIndex(table, columns)` | `PackIndex` |
+| `create_table_sql` from `PRAGMA table_info` | same |
+| `copy_table_sql` | `INSERT INTO main.t (cols) SELECT cols FROM src.t` |
+| `index_name` → `idx_{table}_{col}_…` | same |
+| `create_index_sql` | same |
+
+**Index (SCIP) tables** — copy these columns only; drop `chunks.occurrences`:
+
+```
+documents: id, relative_path
+global_symbols: id, symbol, display_name, kind
+defn_enclosing_ranges: id, document_id, symbol_id, start_line, end_line
+chunks: id, document_id, chunk_index, start_line, end_line
+mentions: chunk_id, symbol_id, role
+```
+
+**Indexes:**
+
+```
+chunks (document_id)
+mentions (symbol_id)
+mentions (chunk_id)
+defn_enclosing_ranges (document_id)
+defn_enclosing_ranges (symbol_id)
+```
+
+**Atlas tables** — copy full columns from sidecar (types/PK from `PRAGMA table_info`, allowlist = all columns present):
+
+```
+meta
+files
+dirs
+search_docs
+```
+
+Index: `dirs (parent_path)` → `idx_dirs_parent` via the same `PackIndex` helper.
+
+**FTS:** do **not** copy `search_docs_fts` virtual/shadow tables. After `search_docs` is filled:
+
+```sql
+CREATE VIRTUAL TABLE search_docs_fts USING fts5(
+    path, kind UNINDEXED, symbol UNINDEXED, name, summary,
+    tokenize='unicode61 remove_diacritics 2'
+);
+INSERT INTO search_docs_fts(rowid, path, kind, symbol, name, summary)
+SELECT rowid, path, kind, symbol, name, summary FROM search_docs;
+```
+
+(Match atlas `schema.py` FTS definition.)
+
+Attach full index as `scip`, atlas as `atlas`, write into `main` (`explorer.db`). No source blob in output. Reject if source `chunks` is missing required location columns. If atlas has no `search_docs`, fail (run `scip-atlas sync` first).
+
+Node driver: `better-sqlite3` or Node `node:sqlite` — native, not WASM.
+
+### Tests (pack)
+
+- Output has no `occurrences` column on `chunks`.
+- Mention PK / rdeps query matches full `index.db` for a fixture file (same SQL as atlas `test_slim_index_file_rdeps_match_full`).
+- Atlas `files` / `dirs` / FTS row counts match source sidecar.
+- Missing source → non-zero exit.
+
+---
+
+## SPA stack
 
 | Layer | Choice |
 | --- | --- |
@@ -20,7 +123,7 @@ Accordion tree + FTS + file panel (defined symbols, **deps**, **rdeps**). Click 
 | Runtime | Browser only. Queries in a **Worker** |
 | Ship | **Single HTML** — all JS, CSS, and WASM inlined |
 
-Do not add `serve` to scip-atlas. Do not ship a Node API.
+Do not add `serve` to scip-atlas. Do not ship a Node HTTP API.
 
 ### Build (required)
 
@@ -43,26 +146,23 @@ Fonts: system UI stack only.
 Toolbar **Download** control (icon + accessible name “Download this app”). Saves the **original built HTML** (not a DOM snapshot after the user opened DBs).
 
 - `https:` / `http:` — `fetch(location.href)` as blob, same-origin, then `<a download="scip-atlas-web.html">`.
-- `file:` — `fetch` of self often fails; embed the built source at compile time (e.g. `import.meta` asset / string constant of the HTML) or reconstruct from the inlined document **before** mutating the DOM. The saved file must be a working copy of the app (empty explorer, no user DB bytes).
+- `file:` — embed the built source at compile time. Saved file must be a working empty explorer (no user DB bytes).
 
 Saved HTML is usable fully offline.
 
-## Inputs
+## Inputs (SPA)
 
-No CLI flags. No default cache path (the browser cannot read `~/.cache`).
+No CLI flags. Browser cannot read `~/.cache`.
 
-| Input | File |
-| --- | --- |
-| Required | `index.slim.db` (or a bundle that contains slim tables) |
-| Required | `atlas.db` (or the same bundle) |
+**v1 load:** one file, `explorer.db` (pack output). All tables in `main` — no `ATTACH`.
 
-UX: drag-and-drop zone and file picker. Accept two files, or one file if a later atlas bundle exists.
+**Fallback while pack lands:** two files (slim-shaped index + `atlas.db`) + `ATTACH`. Reject full `index.db` if `chunks` has `occurrences`.
 
-Open both in one connection: `ATTACH` the second DB. Join atlas on **path strings**, never SCIP integer ids (ids reshuffle on reindex).
+Join atlas overlay on **path strings**, never SCIP integer ids.
 
-Reject **full** `index.db` when `chunks` has `occurrences` (source). Message: use `scip-atlas index slim`. If `mentions` is missing: “rebuild slim” on deps/rdeps — do not show empty lists as “no importers.”
+If `mentions` is missing: “run pack / rebuild” on deps/rdeps — do not show empty lists as “no importers.”
 
-Refuse leftover `-wal` / `-shm` as the chosen file; ask for a checkpointed copy (`scip-atlas sync` already checkpoints `atlas.db`).
+Refuse `-wal` / `-shm` as the dropped file.
 
 Large files: progress on read; fail clearly if WASM heap cannot hold them. v1 is in-memory only.
 
@@ -72,30 +172,30 @@ Large files: progress on read; fail clearly if WASM heap cannot hold them. v1 is
 
 Lazy: children of one parent, not the whole repo.
 
-- Roots: atlas `dirs` where `parent_path IS NULL` (repo root `relative_path = ''`) plus top-level dirs (`parent_path = ''`).
-- Expand a dir: child dirs (`dirs.parent_path = ?`) and **direct** files (atlas `files` has no `parent_path` — dirname of `relative_path`).
+- Roots: `dirs` where `parent_path IS NULL` (repo root `relative_path = ''`) plus top-level dirs (`parent_path = ''`).
+- Expand a dir: child dirs (`dirs.parent_path = ?`) and **direct** files ( `files` has no `parent_path` — dirname of `relative_path`).
 - Each node: basename, last git author/date/subject, summary if present.
 
-Empty state until DBs are loaded. Persist last-opened DB **names** in `localStorage` only (not file bytes).
+Empty state until a DB is loaded. Persist last-opened **filename** in `localStorage` only (not file bytes).
 
 ### File panel
 
 Selecting a file:
 
 1. Overlay: summary, last commit, author
-2. **Defined symbols** — names + start line from slim `defn_enclosing_ranges` (SCIP defs, not the TS `export` keyword)
+2. **Defined symbols** — names + start line from `defn_enclosing_ranges` (SCIP defs, not the TS `export` keyword)
 3. **deps** — other indexed files this file references
 4. **rdeps** — other indexed files that reference this file’s defined symbols
 
-Click a path → navigate. Optional later: per-symbol deps like `scip-cli deps Symbol`.
+Click a path → navigate.
 
 ### Search
 
-Box → atlas FTS5 `search_docs_fts`. Names/paths first, summaries second. No embeddings.
+Box → `search_docs_fts`. Names/paths first, summaries second. No embeddings.
 
 ### Chrome
 
-- Load DBs
+- Load DB
 - Search
 - **Download this HTML** (always visible, even before DBs)
 
@@ -103,22 +203,16 @@ No login. No settings that call the network.
 
 ## Query surface (in-process, not HTTP)
 
-Same shapes as a former REST sketch — **functions in the worker**, not `GET`:
-
 ```text
 tree(parent)     → roots / children (dirs + files)
 node(path)       → overlay + symbols + deps + rdeps
 search(q)        → FTS hits
-health()         → which DBs loaded, table presence, sizes
+health()         → loaded file, table presence, sizes
 ```
 
-Lazy tree. `node` is the jump target.
+## SQL (single `explorer.db`)
 
-## SQL (slim + atlas)
-
-`mentions.role != 1` is a reference (role 1 = definition). Same as scip-cli `deps` / `rdeps`.
-
-Prefix table names with the attached schema if both files are open (`slim.documents`, `atlas.files`, …). If one bundled DB, no prefix.
+`mentions.role != 1` is a reference (role 1 = definition). Same as scip-cli `deps` / `rdeps`. No schema prefix.
 
 Defined symbols in a file:
 
@@ -132,7 +226,7 @@ WHERE d.relative_path = ?
 ORDER BY der.start_line, gs.symbol
 ```
 
-**rdeps** (importers of this file):
+**rdeps:**
 
 ```sql
 SELECT DISTINCT d.relative_path
@@ -147,7 +241,7 @@ WHERE m.role != 1
 ORDER BY d.relative_path
 ```
 
-**deps** (files this file uses):
+**deps:**
 
 ```sql
 SELECT DISTINCT def_d.relative_path
@@ -162,7 +256,7 @@ WHERE c.document_id = (SELECT id FROM documents WHERE relative_path = ?)
 ORDER BY def_d.relative_path
 ```
 
-Direct files under dir `src` (atlas, no `parent_path` on files):
+Direct files under dir `src`:
 
 ```sql
 SELECT relative_path, author_name, commit_time, subject, summary
@@ -185,10 +279,6 @@ WHERE search_docs_fts MATCH ?
 LIMIT 50
 ```
 
-## Slim contract
-
-`scip-atlas index slim` **keeps** `mentions` and chunk location columns. It **drops** `chunks.occurrences`. v1 does not show source snippets.
-
 ## SCIP gaps
 
 Empty deps/rdeps is often a SCIP miss (`require()`, named imports, barrels), not proof unused. Show the lists; do not label “dead” in v1.
@@ -197,21 +287,20 @@ Empty deps/rdeps is often a SCIP miss (`require()`, named imports, barrels), not
 
 - **NEVER** `fetch`/`XHR`/`sendBeacon`/`WebSocket` except: (1) GitHub Pages serving this HTML, (2) `fetch(location.href)` for the Download button on http(s).
 - **NEVER** upload DBs. `File` → `arrayBuffer()` in-page only.
-- **NEVER** persist DB bytes to `localStorage` / IndexedDB / OPFS in v1 (memory is enough; OPFS would need headers `file://` lacks).
-- Service worker: **no**. It is extra network/cache surface and breaks `file://`.
+- **NEVER** persist DB bytes to `localStorage` / IndexedDB / OPFS in v1.
+- Service worker: **no**.
 
 ## Non-goals (v1)
 
-- Reindex, sync, summarize
+- Reindex, sync, summarize (stay in atlas / scip-cli)
 - Source snippets / blame
 - Embeddings / Q&A
-- Auth, accounts, share links of DBs
+- Auth, accounts
 - Editing the DBs
-- Node/Python backend
-- Multi-file GitHub Pages deploy (`app.js`, `sqlite3.wasm` beside HTML)
+- Node HTTP backend
+- Multi-file GitHub Pages deploy
 
 ## Later
 
-- Atlas `bundle` command → one `.db` to drop
 - Embed **summaries** only (RAG), invalidate with atlas hashes
 - OPFS when not on `file://`

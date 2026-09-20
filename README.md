@@ -1,35 +1,30 @@
 # scip-atlas-web
 
-Read-only **single-file SPA** for a [scip-atlas](https://github.com/flesler/scip-atlas) sidecar plus a slim scip-cli index.
+Read-only **single-file SPA** plus a Node **pack** CLI.
 
-Accordion of the repo, FTS search, jump-nav via per-file **deps** / **rdeps** and defined symbols. Runs entirely in the browser. No server, no indexer, no git, no LLM.
+Accordion of the repo, FTS search, jump-nav via per-file **deps** / **rdeps**. Runs in the browser. Pack builds one `explorer.db` (slim SCIP graph + atlas overlay, no source).
 
 Canonical contract: [docs/spec.md](docs/spec.md).
 
-## Artifact
+## Artifact (SPA)
 
-Build emits **one** `index.html`: TypeScript, CSS, and SQLite WASM inlined, minified, tree-shaken. Open it from GitHub Pages, or download it (toolbar icon) and use offline via `file://`.
-
-**Zero outbound HTTP** after the page itself is loaded. User SQLite files stay in memory (never uploaded).
-
-## Source vs ship
+Build emits **one** `index.html`: TypeScript, CSS, and SQLite WASM inlined. GitHub Pages or Download → `file://`. **Zero outbound HTTP** after load. User DB stays in memory.
 
 | | |
 | --- | --- |
-| Dev | `src/**/*.ts`, CSS, `@sqlite.org/sqlite-wasm` from npm |
-| Ship | one HTML file, nothing else |
+| Dev | `src/**/*.ts`, CSS, `@sqlite.org/sqlite-wasm` |
+| Ship | one HTML |
+| Pack | `bin/pack.ts` — Node, not in the HTML |
 
-## DBs (user provides)
+## Pack
 
-Drag-drop or file picker:
+```bash
+npx tsx bin/pack.ts --repo /path/to/repo
+# full index.db + atlas.db → explorer.db
+```
 
-| File | Role |
-| --- | --- |
-| `index.slim.db` | Documents, symbols, definition lines, mention graph (**no source**) |
-| `atlas.db` | Git overlay, summaries, FTS |
-
-Optional later: one bundled file from atlas. Rebuild slim after schema changes: `scip-atlas index slim`.
+Drop `explorer.db` on the page. Port of atlas `slim_index.py` + sidecar merge; then **remove slim from atlas**.
 
 ## Status
 
-Spec only. Implement against `docs/spec.md`.
+Spec only. Implement pack first (parity with Python slim + atlas merge), then SPA.
