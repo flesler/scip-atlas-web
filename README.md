@@ -1,27 +1,34 @@
 # scip-atlas-web
 
-Read-only explorer for a [scip-atlas](https://github.com/flesler/scip-atlas) sidecar plus a scip-cli **slim** index.
+Read-only **single-file SPA** for a [scip-atlas](https://github.com/flesler/scip-atlas) sidecar plus a slim scip-cli index.
 
-Accordion of the repo, FTS search, and jump-nav via per-file **deps** / **rdeps** and defined symbols. No indexer. No git. No LLM.
+Accordion of the repo, FTS search, jump-nav via per-file **deps** / **rdeps** and defined symbols. Runs entirely in the browser. No server, no indexer, no git, no LLM.
 
 Canonical contract: [docs/spec.md](docs/spec.md).
 
-## Stack
+## Artifact
 
-**TypeScript** (Node HTTP + browser). Atlas and scip-cli stay Python ETL. This repo is a UI over SQLite.
+Build emits **one** `index.html`: TypeScript, CSS, and SQLite WASM inlined, minified, tree-shaken. Open it from GitHub Pages, or download it (toolbar icon) and use offline via `file://`.
 
-Python would share sqlite/`ATTACH` with atlas, but the product is a collapsible tree and click-to-jump — that is a browser app. One TS codebase beats a Python API plus a separate frontend.
+**Zero outbound HTTP** after the page itself is loaded. User SQLite files stay in memory (never uploaded).
 
-## DBs
+## Source vs ship
 
-Point the server at a scip-cli cache dir (or explicit paths):
+| | |
+| --- | --- |
+| Dev | `src/**/*.ts`, CSS, `@sqlite.org/sqlite-wasm` from npm |
+| Ship | one HTML file, nothing else |
+
+## DBs (user provides)
+
+Drag-drop or file picker:
 
 | File | Role |
 | --- | --- |
 | `index.slim.db` | Documents, symbols, definition lines, mention graph (**no source**) |
 | `atlas.db` | Git overlay, summaries, FTS |
 
-Rebuild slim after atlas updates that change the slim schema: `scip-atlas index slim`.
+Optional later: one bundled file from atlas. Rebuild slim after schema changes: `scip-atlas index slim`.
 
 ## Status
 
