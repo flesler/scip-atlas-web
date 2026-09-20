@@ -1,0 +1,30 @@
+{
+  "name": "scip-atlas-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "pack": "tsx bin/pack.ts",
+    "build": "vite build && tsx scripts/patch-download.ts",
+    "dev": "vite",
+    "test": "vitest run && playwright test",
+    "test:unit": "vitest run",
+    "test:ui": "playwright test",
+    "dump-ui": "tsx bin/dump-ui.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^26.6.2",
+    "@types/typescript": "^2.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@sqlite.org/sqlite-wasm": "^3.53.4-build1",
+    "better-sqlite3": "^13.0.3"
+  }
+}

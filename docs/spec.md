@@ -23,7 +23,34 @@ The CLI is **not** inlined into the HTML. WASM inlining is SPA-only.
 
 ## Pack CLI (`bin/pack.ts`)
 
-Port of atlas `scip_atlas/slim_index.py` **plus** merge of the sidecar. Reference that Python while packing; once this CLI works, **delete slim from atlas** (see atlas spec).
+Port of atlas slim + sidecar merge into one `explorer.db`. Once this CLI works, **delete slim from atlas** (atlas `docs/spec.md` § Slim index).
+
+### Atlas mirror map (copy → TypeScript)
+
+Sibling repo: `../scip-atlas/` (same parent as this repo). Read these files directly — do not guess schema or SQL.
+
+| Atlas (Python) | Web (TypeScript) | Port |
+| --- | --- | --- |
+| `../scip-atlas/scip_atlas/slim_index.py` | `bin/pack/slim.ts` (or inline in `pack.ts`) | `SlimIndexTable` → `PackTable`, `SlimIndexIndex` → `PackIndex`, `SLIM_INDEX_TABLES`, `SLIM_INDEX_INDEXES`, `index_name`, `create_index_sql`, `create_table_sql`, `copy_table_sql`, `build_slim_index` loop |
+| `../scip-atlas/scip_atlas/project_paths.py` | `bin/pack/paths.ts` | `project_cache_slug`, `_project_root_hash`, `scip_cli_cache_dir`, `resolve_git_root`, `default_index_path`, `default_sidecar_path` (from `schema.py` L146) — **copy logic, no `import scip_cli`** |
+| `../scip-atlas/scip_atlas/schema.py` | `bin/pack/atlas.ts` | `commits` / `files` / `dirs` / `meta` / `search_docs` DDL, `_FTS_CREATE_SQL`, `close_sidecar` WAL checkpoint before reading atlas |
+| `../scip-atlas/scip_atlas/search.py` | (pack only) | FTS rebuild: `INSERT INTO search_docs_fts … SELECT … FROM search_docs` — same columns as `rebuild_search_index` |
+| `../scip-atlas/.cursor/skills/scip-atlas/references/slim-index.md` | — | Config → SQL pattern doc; parity checklist |
+| `../scip-atlas/tests/test_slim_index.py` | `tests/pack.test.ts` | Mirror: no `occurrences`, rdeps SQL match, missing source exit, generated index DDL |
+| `../scip-atlas/tests/test_project_paths.py` | `tests/paths.test.ts` | `test_cache_slug_matches_scip_cli` — slug must stay aligned |
+
+**Pack flow** (mirror `build_slim_index` + atlas copy):
+
+1. Resolve paths (`paths.ts`) — full `index.db`, `atlas.db`, `explorer.db`.
+2. Checkpoint atlas WAL (`schema.close_sidecar` pattern).
+3. Open output `main`; `ATTACH` full index as `scip`, atlas as `atlas`.
+4. For each `SLIM_INDEX_TABLES` entry: `create_table_sql` from `PRAGMA table_info` on `scip`, then `INSERT INTO main.t SELECT cols FROM scip.t`.
+5. For atlas tables (`meta`, `commits`, `files`, `dirs`, `search_docs`): copy all columns from `atlas` into `main` (allowlist = every column present). Copy `commits` before `files`/`dirs` (FK).
+6. Create `SLIM_INDEX_INDEXES` + `idx_dirs_parent` via `PackIndex` helper.
+7. Drop any inherited FTS shadow tables; run `_FTS_CREATE_SQL` + populate from `search_docs`.
+8. Detach, commit, print size line.
+
+**SPA SQL** in this spec (deps / rdeps / tree / search) is already the consumer contract — same queries as atlas tests and scip-cli.
 
 ### Command
 
@@ -80,6 +107,7 @@ defn_enclosing_ranges (symbol_id)
 
 ```
 meta
+commits
 files
 dirs
 search_docs
@@ -154,9 +182,7 @@ Saved HTML is usable fully offline.
 
 No CLI flags. Browser cannot read `~/.cache`.
 
-**v1 load:** one file, `explorer.db` (pack output). All tables in `main` — no `ATTACH`.
-
-**Fallback while pack lands:** two files (slim-shaped index + `atlas.db`) + `ATTACH`. Reject full `index.db` if `chunks` has `occurrences`.
+**v1 load:** one file — `explorer.db` (pack output). All tables in `main` — no `ATTACH`. Reject full `index.db` if `chunks` has `occurrences`.
 
 Join atlas overlay on **path strings**, never SCIP integer ids.
 
@@ -259,11 +285,12 @@ ORDER BY def_d.relative_path
 Direct files under dir `src`:
 
 ```sql
-SELECT relative_path, author_name, commit_time, subject, summary
-FROM files
-WHERE relative_path LIKE 'src/%'
-  AND instr(substr(relative_path, 5), '/') = 0
-ORDER BY relative_path
+SELECT f.relative_path, c.author_name, c.commit_time, c.subject, f.summary
+FROM files f
+JOIN commits c ON c.sha = f.commit_sha
+WHERE f.relative_path LIKE 'src/%'
+  AND instr(substr(f.relative_path, 5), '/') = 0
+ORDER BY f.relative_path
 ```
 
 Root files: `instr(relative_path, '/') = 0`.
