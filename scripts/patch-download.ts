@@ -6,11 +6,6 @@ const distDir = path.resolve("dist");
 const htmlPath = path.join(distDir, "index.html");
 let html = fs.readFileSync(htmlPath, "utf8");
 
-html = html.replace(
-  /new Worker\(new URL\([^)]*sqlite3-worker1[^)]*\)[^)]*\)/g,
-  '(()=>{throw new Error("sqlite3Worker1Promiser is disabled")})()',
-);
-
 const source = html.replaceAll(marker, "");
 html = html.replaceAll(marker, JSON.stringify(source));
 fs.writeFileSync(htmlPath, html);
