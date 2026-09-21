@@ -15,26 +15,12 @@ export type PackIndex = {
   columns: readonly string[];
 };
 
-export const SLIM_INDEX_TABLES: readonly PackTable[] = [
-  { name: "documents", columns: ["id", "relative_path"] },
-  { name: "global_symbols", columns: ["id", "symbol", "display_name", "kind"] },
-  {
-    name: "defn_enclosing_ranges",
-    columns: ["id", "document_id", "symbol_id", "start_line", "end_line"],
-  },
-  { name: "chunks", columns: ["id", "document_id", "chunk_index", "start_line", "end_line"] },
-  { name: "mentions", columns: ["chunk_id", "symbol_id", "role"] },
-];
-
-export const SLIM_INDEX_INDEXES: readonly PackIndex[] = [
-  { table: "chunks", columns: ["document_id"] },
-  { table: "mentions", columns: ["symbol_id"] },
-  { table: "mentions", columns: ["chunk_id"] },
-  { table: "defn_enclosing_ranges", columns: ["document_id"] },
-  { table: "defn_enclosing_ranges", columns: ["symbol_id"] },
-];
-
-export const ATLAS_TABLES = ["meta", "commits", "files", "dirs", "search_docs"] as const;
+export {
+  EXPLORER_ATLAS_INDEXES as ATLAS_INDEXES,
+  EXPLORER_ATLAS_TABLES as ATLAS_TABLES,
+  EXPLORER_SLIM_INDEXES as SLIM_INDEX_INDEXES,
+  EXPLORER_SLIM_TABLES as SLIM_INDEX_TABLES,
+} from "./schema.js"
 
 export type ColumnSpec = {
   name: string;

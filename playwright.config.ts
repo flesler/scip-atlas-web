@@ -1,4 +1,5 @@
-import { defineConfig } from "@playwright/test";
+// WIP — browser e2e, not wired into `npm test`. Run `npx playwright install` first.
+import { defineConfig } from "@playwright/test"
 
 export default defineConfig({
   testDir: "tests/e2e",

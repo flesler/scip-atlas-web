@@ -6,8 +6,7 @@
     "pack": "tsx bin/pack.ts",
     "build": "vite build && tsx scripts/patch-download.ts",
     "dev": "vite",
-    "test": "vitest run && playwright test",
-    "test:unit": "vitest run",
+    "test": "vitest run",
     "test:ui": "playwright test",
     "dump-ui": "tsx bin/dump-ui.ts",
     "typecheck": "tsc --noEmit"

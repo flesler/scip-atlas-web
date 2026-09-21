@@ -1,53 +1,40 @@
+import { FILE_PANEL, SYMBOL_ROW, TREE_DIR, TREE_FILE, tableCols } from "./query-columns.js"
+
 export const SQL = {
   roots: `
-    SELECT d.relative_path, d.parent_path,
-           c.author_name AS last_author_name, c.commit_time AS last_commit_time,
-           c.subject AS last_subject, d.summary
+    SELECT ${tableCols("d", TREE_DIR)}
     FROM dirs d
-    LEFT JOIN commits c ON c.sha = d.commit_sha
     WHERE d.parent_path = ''
     ORDER BY d.relative_path
   `,
   childDirs: `
-    SELECT d.relative_path, d.parent_path,
-           c.author_name AS last_author_name, c.commit_time AS last_commit_time,
-           c.subject AS last_subject, d.summary
+    SELECT ${tableCols("d", TREE_DIR)}
     FROM dirs d
-    LEFT JOIN commits c ON c.sha = d.commit_sha
     WHERE d.parent_path = ?
     ORDER BY d.relative_path
   `,
   childFiles: `
-    SELECT f.relative_path, c.author_name, c.commit_time, c.subject, f.summary
+    SELECT ${tableCols("f", TREE_FILE)}
     FROM files f
-    JOIN commits c ON c.sha = f.commit_sha
-    WHERE f.relative_path LIKE ?
-      AND instr(substr(f.relative_path, length(?) + 2), '/') = 0
+    WHERE f.folder = ?
     ORDER BY f.relative_path
   `,
   rootFiles: `
-    SELECT f.relative_path, c.author_name, c.commit_time, c.subject, f.summary
+    SELECT ${tableCols("f", TREE_FILE)}
     FROM files f
-    JOIN commits c ON c.sha = f.commit_sha
-    WHERE instr(f.relative_path, '/') = 0
+    WHERE f.folder = ''
     ORDER BY f.relative_path
   `,
   fileOverlay: `
-    SELECT f.relative_path, c.author_name, c.commit_time, c.subject, f.summary
+    SELECT f.relative_path, f.summary,
+           ct.name AS author_name, c.commit_time, c.message
     FROM files f
     JOIN commits c ON c.sha = f.commit_sha
+    JOIN committers ct ON ct.email = c.committer_email
     WHERE f.relative_path = ?
   `,
-  dirOverlay: `
-    SELECT d.relative_path,
-           c.author_name AS last_author_name, c.commit_time AS last_commit_time,
-           c.subject AS last_subject, d.summary
-    FROM dirs d
-    LEFT JOIN commits c ON c.sha = d.commit_sha
-    WHERE d.relative_path = ?
-  `,
   definedSymbols: `
-    SELECT gs.display_name, gs.symbol, der.start_line, der.end_line
+    SELECT gs.symbol, der.start_line, der.end_line
     FROM global_symbols gs
     JOIN defn_enclosing_ranges der ON der.symbol_id = gs.id
     JOIN documents d ON der.document_id = d.id
@@ -80,11 +67,18 @@ export const SQL = {
     ORDER BY d.relative_path
   `,
   search: `
-    SELECT path, kind, name, summary
-    FROM search_docs_fts
-    WHERE search_docs_fts MATCH ?
+    SELECT relative_path AS path, name, 'file' AS kind
+    FROM files
+    WHERE name LIKE ? || '%'
+    UNION ALL
+    SELECT relative_path AS path, name, 'dir' AS kind
+    FROM dirs
+    WHERE name LIKE ? || '%'
+    ORDER BY path
     LIMIT 50
   `,
   tableNames: `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,
   chunkColumns: `PRAGMA table_info(chunks)`,
-} as const;
+} as const
+
+export { FILE_PANEL, SYMBOL_ROW, TREE_DIR, TREE_FILE }

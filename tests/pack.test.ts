@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { formatSummaryWarning, missingSummaryCoverages } from "../bin/pack/atlas.js"
 import { buildExplorerDb } from "../bin/pack/build.js"
 import {
+  ATLAS_TABLES,
   PackError, SLIM_INDEX_INDEXES,
   SLIM_INDEX_TABLES,
   copyTableSql,
@@ -97,17 +98,29 @@ describe("buildExplorerDb", () => {
     const mentionPk = (
       conn.prepare("SELECT sql FROM sqlite_master WHERE name = 'mentions'").get() as { sql: string }
     ).sql;
-    conn.close();
 
-    const required = new Set(SLIM_INDEX_TABLES.map((table) => table.name));
-    for (const name of ["meta", "commits", "files", "dirs", "search_docs", "search_docs_fts"]) {
-      required.add(name);
-    }
+    const required = new Set([
+      ...SLIM_INDEX_TABLES.map((table) => table.name),
+      ...ATLAS_TABLES.map((table) => table.name),
+    ]);
     for (const name of required) {
       expect(tables.has(name)).toBe(true);
     }
+    expect(tables.has("meta")).toBe(false)
+    expect(tables.has("search_docs")).toBe(false)
+    expect(tables.has("search_docs_fts")).toBe(false);
     expect(chunkCols.has("occurrences")).toBe(false);
+    expect(chunkCols.has("chunk_index")).toBe(false)
+    const symbolCols = new Set(
+      (conn.pragma("table_info(global_symbols)") as { name: string }[]).map((row) => row.name),
+    )
+    expect(symbolCols.has("display_name")).toBe(false)
+    expect(symbolCols.has("kind")).toBe(false)
+    const fileCols = new Set((conn.pragma("table_info(files)") as { name: string }[]).map((row) => row.name))
+    expect(fileCols.has("blob_sha")).toBe(false)
+    expect(fileCols.has("summary_at_sha")).toBe(false);
     expect(mentionPk).toContain("PRIMARY KEY (chunk_id, symbol_id, role)");
+    conn.close();
   });
 
   it("matches rdeps against full index for fixture file", () => {
@@ -124,22 +137,19 @@ describe("buildExplorerDb", () => {
     expect(packedRows).toEqual(fullRows);
   });
 
-  it("copies atlas files, dirs, and FTS row counts", () => {
+  it("copies atlas committers, commits, files, and dirs row counts", () => {
     const output = makeOutput();
     buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output });
 
     const atlas = new Database(ATLAS_PATH, { readonly: true });
     const packed = new Database(output, { readonly: true });
-    for (const table of ["commits", "files", "dirs", "search_docs"]) {
+    for (const table of ATLAS_TABLES.map((row) => row.name)) {
       const sourceCount = (atlas.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
       const packedCount = (packed.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
       expect(packedCount).toBe(sourceCount);
     }
-    const sourceFts = (atlas.prepare("SELECT COUNT(*) AS n FROM search_docs_fts").get() as { n: number }).n;
-    const packedFts = (packed.prepare("SELECT COUNT(*) AS n FROM search_docs_fts").get() as { n: number }).n;
     atlas.close();
     packed.close();
-    expect(packedFts).toBe(sourceFts);
   });
 
   it("rejects missing source index", () => {

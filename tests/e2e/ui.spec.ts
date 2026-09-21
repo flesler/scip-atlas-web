@@ -1,3 +1,4 @@
+// WIP — opt-in via `npm run test:ui` after `npx playwright install`. Not part of `npm test`.
 import { expect, test } from "@playwright/test"
 import fs from "node:fs"
 import os from "node:os"
@@ -39,10 +40,11 @@ test("loads explorer.db and navigates tree without errors", async ({ page }) => 
   const srcRow = page.locator(".tree-row").filter({ hasText: "src" });
   await srcRow.click();
   await expect(page.locator(".tree-children .tree-row").first()).toBeVisible();
-  await expect(page.locator("#detail-panel h2")).toContainText("src");
+  await expect(page.locator(".layout")).toHaveClass(/layout--tree-only/);
 
   const helper = page.locator(".tree-row", { hasText: "helper.ts" }).first();
   await helper.click();
+  await expect(page.locator(".layout")).not.toHaveClass(/layout--tree-only/);
   await expect(page.locator("#detail-panel h2")).toContainText("helper.ts");
   await expect(page.locator(".error")).toHaveCount(0);
   expect(errors.filter((message) => message.includes("too much recursion"))).toEqual([]);

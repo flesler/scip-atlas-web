@@ -1,9 +1,6 @@
 export type TreeNode = {
   path: string;
   kind: "dir" | "file";
-  author?: string | null;
-  commitTime?: number | null;
-  subject?: string | null;
   summary?: string | null;
 };
 
@@ -17,7 +14,7 @@ export type SymbolRow = {
 export type OverlayInfo = {
   author_name: string;
   commit_time: number;
-  subject: string;
+  message: string;
   summary: string | null;
 };
 
@@ -58,7 +55,6 @@ export type SearchHit = {
   path: string;
   kind: string;
   name: string;
-  summary: string | null;
 };
 
 export type HealthInfo = {

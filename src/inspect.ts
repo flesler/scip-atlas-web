@@ -25,10 +25,8 @@ export type InspectRows = {
 
 export type QueryAll = <T extends Record<string, unknown>>(sql: string, ...bind: unknown[]) => T[];
 
-const FTS_SHADOW = /^search_docs_fts_(config|content|data|docsize|idx)$/;
-
 const SCIP_CLI_TABLES = new Set(SLIM_INDEX_TABLES.map((table) => table.name));
-const SCIP_ATLAS_TABLES = new Set([...ATLAS_TABLES, "search_docs_fts"]);
+const SCIP_ATLAS_TABLES = new Set(ATLAS_TABLES.map((table) => table.name));
 
 export type InspectTableGroup = {
   id: "scip-cli" | "scip-atlas" | "other";
@@ -63,8 +61,8 @@ export function groupInspectTables(tables: InspectTable[]): InspectTableGroup[] 
   return groups;
 }
 
-export function isBrowsableTable(name: string): boolean {
-  return !FTS_SHADOW.test(name);
+export function isBrowsableTable(_name: string): boolean {
+  return true
 }
 
 export function quoteIdent(name: string): string {

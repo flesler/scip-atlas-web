@@ -1,5 +1,5 @@
-import { defineConfig, type Plugin } from "vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
+import { defineConfig, type Plugin } from "vite"
+import { viteSingleFile } from "vite-plugin-singlefile"
 
 const SQLITE_WORKER1_STUB = "\0virtual:sqlite3-worker1-stub";
 
@@ -31,7 +31,10 @@ function stripSqliteWorker1(): Plugin {
   };
 }
 
+const repo = process.env.GITHUB_REPOSITORY?.split("/")[1];
+
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS && repo ? `/${repo}/` : "/",
   plugins: [stripSqliteWorker1(), viteSingleFile()],
   optimizeDeps: {
     exclude: ["@sqlite.org/sqlite-wasm"],

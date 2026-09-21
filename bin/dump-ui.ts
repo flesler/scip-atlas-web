@@ -3,7 +3,6 @@ import Database from "better-sqlite3"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { joinMeta } from "../src/format.js"
 import { listTables, tableSchema } from "../src/inspect.js"
 import { SQL } from "../src/queries.js"
 import { listTree } from "../src/tree.js"
@@ -67,7 +66,13 @@ export function dumpExplorerUi(dbPath: string): DumpReport {
     `SELECT relative_path FROM dirs WHERE relative_path != '' ORDER BY relative_path LIMIT 1`,
   )[0];
   const file = firstFile ? queryAll<Record<string, unknown>>(db, SQL.fileOverlay, firstFile.relative_path)[0] ?? null : null;
-  const dir = firstDir ? queryAll<Record<string, unknown>>(db, SQL.dirOverlay, firstDir.relative_path)[0] ?? null : null;
+  const dir = firstDir
+    ? queryAll<Record<string, unknown>>(
+      db,
+      `SELECT relative_path, summary FROM dirs WHERE relative_path = ?`,
+      firstDir.relative_path,
+    )[0] ?? null
+    : null;
 
   const bytes = fs.statSync(resolved).size;
   db.close();
@@ -95,11 +100,8 @@ function printReport(report: DumpReport) {
 
   console.log("\n## tree roots");
   for (const node of report.roots) {
-    const meta = joinMeta([
-      node.author,
-      node.commitTime ? new Date(node.commitTime * 1000).toISOString().slice(0, 10) : "",
-    ]);
-    console.log(`- [${node.kind}] ${node.path || "/"}${meta ? ` — ${meta}` : ""}`);
+    const blurb = node.summary ? ` — ${node.summary.slice(0, 80)}` : ""
+    console.log(`- [${node.kind}] ${node.path || "/"}${blurb}`);
   }
 
   console.log("\n## sample file overlay");

@@ -11,6 +11,7 @@ import { downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
 import { groupInspectTables } from "./inspect.js"
 import "./styles.css"
+import { createTreeIcon } from "./tree-icons.js"
 import { ROOT_TREE_KEY, treeCacheKey } from "./tree.js"
 import type { PathDetails, SearchHit, TreeNode, ViewMode } from "./types.js"
 import { renderDbDetails, renderDbTableList } from "./ui-db.js"
@@ -25,6 +26,8 @@ const state = {
   viewMode: "explorer" as ViewMode,
   expanded: new Set<string>(),
   selectedPath: "",
+  detailPath: null as string | null,
+  searchActive: false,
   selectedTable: null as string | null,
   tableOffset: 0,
   inspectTables: [] as Awaited<ReturnType<typeof fetchInspectTables>>,
@@ -40,7 +43,7 @@ app.innerHTML = `
       Load DB
       <input id="db-input" type="file" accept=".db" hidden />
     </label>
-    <input id="search-input" type="search" placeholder="Search paths and symbols" />
+    <input id="search-input" type="search" placeholder="Search names" />
     <div class="view-toggle" role="tablist" aria-label="View mode">
       <button id="view-explorer" type="button" class="active" role="tab" aria-selected="true">Explorer</button>
       <button id="view-db" type="button" role="tab" aria-selected="false">DB</button>
@@ -60,7 +63,8 @@ const statusEl = app.querySelector<HTMLDivElement>("#status")!;
 const treePanel = app.querySelector<HTMLDivElement>("#tree-panel")!;
 const detailPanel = app.querySelector<HTMLDivElement>("#detail-panel")!;
 const viewExplorerBtn = app.querySelector<HTMLButtonElement>("#view-explorer")!
-const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!;
+const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!
+const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
 
 function basename(path: string): string {
   const parts = path.split("/");
@@ -72,6 +76,13 @@ function formatTime(epochSeconds: number | null | undefined): string {
     return "";
   }
   return new Date(epochSeconds * 1000).toLocaleDateString();
+}
+
+function formatSymbolRange(startLine: number, endLine: number): string {
+  if (endLine > 0) {
+    return `${startLine}:${endLine}`
+  }
+  return String(startLine)
 }
 
 function setError(message: string) {
@@ -115,19 +126,62 @@ async function toggleDir(path: string) {
   await ensureChildren(path)
 }
 
-async function selectPath(path: string) {
-  state.selectedPath = path;
-  state.error = "";
-  await expandAncestors(path);
-  render();
+function syncExplorerLayout() {
+  layoutEl.classList.toggle(
+    "layout--tree-only",
+    state.viewMode === "explorer" && !state.detailPath && !state.searchActive,
+  )
+}
+
+function hideDetailPanel() {
+  state.detailPath = null
+  detailPanel.innerHTML = ""
+  syncExplorerLayout()
+}
+
+function scrollDetailPanelToTop() {
+  detailPanel.scrollTo({ top: 0, behavior: "smooth" })
+}
+
+function scrollSelectedTreeItemIntoView() {
+  treePanel.querySelector<HTMLElement>(".tree-row.selected")?.scrollIntoView({
+    block: "nearest",
+    behavior: "smooth",
+  })
+}
+
+async function selectDir(path: string) {
+  state.selectedPath = path
+  state.searchActive = false
+  state.error = ""
+  hideDetailPanel()
+  await expandAncestors(path)
+  render()
+}
+
+async function selectFile(path: string) {
+  state.selectedPath = path
+  state.detailPath = path
+  state.searchActive = false
+  state.error = ""
+  scrollDetailPanelToTop()
+  await expandAncestors(path)
+  await render()
+  scrollSelectedTreeItemIntoView()
   if (!path || !state.loaded) {
-    return;
+    return
   }
   try {
-    const details = await fetchNode(path);
-    renderDetails(details);
+    const details = await fetchNode(path)
+    if (details.kind !== "file") {
+      hideDetailPanel()
+      return
+    }
+    renderDetails(details)
+    syncExplorerLayout()
+    scrollDetailPanelToTop()
   } catch (error) {
-    setError(error instanceof Error ? error.message : String(error));
+    setError(error instanceof Error ? error.message : String(error))
   }
 }
 
@@ -144,6 +198,7 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
     const row = document.createElement("button")
     row.type = "button";
     row.className = `tree-row${state.selectedPath === node.path ? " selected" : ""}`;
+    row.dataset.path = node.path;
     const labelText = node.path ? basename(node.path) : "/"
     row.setAttribute("aria-label", node.kind === "dir" ? `Directory ${labelText}` : `File ${labelText}`);
 
@@ -161,21 +216,28 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
       row.appendChild(spacer);
     }
 
+    row.appendChild(createTreeIcon(node.kind, node.kind === "dir" && state.expanded.has(node.path)))
+
     const label = document.createElement("span")
     label.className = "tree-label"
     label.textContent = labelText;
     row.appendChild(label);
 
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = joinMeta([node.author, formatTime(node.commitTime ?? null)]);
-    row.appendChild(meta);
+    const summary = document.createElement("span")
+    summary.className = "tree-summary"
+    summary.textContent = node.summary ?? ""
+    if (node.summary) {
+      summary.title = node.summary
+    }
+    row.appendChild(summary);
 
     row.addEventListener("click", async () => {
       if (node.kind === "dir") {
         await toggleDir(node.path)
+        await selectDir(node.path)
+        return
       }
-      await selectPath(node.path)
+      await selectFile(node.path)
     });
 
     item.appendChild(row);
@@ -194,43 +256,45 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
 function renderDetails(details: PathDetails) {
   const overlay = details.overlay;
   const meta = overlay
-    ? joinMeta([overlay.author_name, formatTime(overlay.commit_time), overlay.subject])
+    ? joinMeta([overlay.author_name, formatTime(overlay.commit_time), overlay.message])
     : "";
   detailPanel.innerHTML = `
-    <h2>${details.path}</h2>
-    <p class="meta">${details.kind === "dir" ? "directory" : "file"}${meta ? ` · ${meta}` : ""}</p>
+    <div class="detail-header">
+      <h2>${details.path}</h2>
+      <button type="button" class="detail-close" aria-label="Close file panel">×</button>
+    </div>
+    <p class="meta">file${meta ? ` · ${meta}` : ""}</p>
     ${overlay?.summary ? `<p>${overlay.summary}</p>` : ""}
-    ${
-    details.kind === "file"
-      ? `<section class="section">
+    <section class="section">
       <h3>Defined symbols</h3>
       ${
         details.symbols.length
           ? `<ul class="link-list">${details.symbols
               .map(
                 (symbol) =>
-                  `<li>${symbol.display_name} <span class="meta">line ${symbol.start_line}</span></li>`,
+                  `<li>${symbol.display_name} <span class="meta">${formatSymbolRange(symbol.start_line, symbol.end_line)}</span></li>`,
               )
               .join("")}</ul>`
           : `<p class="meta">No symbols indexed for this file.</p>`
       }
     </section>
     <section class="section">
-      <h3>deps</h3>
+      <h3>Imports</h3>
       ${renderPathList(details.deps)}
     </section>
     <section class="section">
-      <h3>reverse deps</h3>
+      <h3>Imported by</h3>
       ${renderPathList(details.rdeps)}
-    </section>`
-    : `<p class="meta">Expand the tree to browse directory contents.</p>`
-    }
+    </section>
   `;
+  detailPanel.querySelector(".detail-close")?.addEventListener("click", () => {
+    hideDetailPanel()
+  })
   detailPanel.querySelectorAll("[data-path]").forEach((button) => {
     button.addEventListener("click", () => {
       const path = button.getAttribute("data-path");
       if (path) {
-        void selectPath(path);
+        void selectFile(path);
       }
     });
   });
@@ -238,7 +302,7 @@ function renderDetails(details: PathDetails) {
 
 function renderPathList(paths: string[]): string {
   if (!paths.length) {
-    return `<p class="meta">None found (may be a SCIP indexing gap).</p>`;
+    return `<p class="meta">None found.</p>`;
   }
   return `<ul class="link-list">${paths
     .map((path) => `<li><button type="button" data-path="${path}">${path}</button></li>`)
@@ -246,6 +310,8 @@ function renderPathList(paths: string[]): string {
 }
 
 function renderSearchResults(hits: SearchHit[]) {
+  state.searchActive = true
+  state.detailPath = null
   if (!hits.length) {
     detailPanel.innerHTML = `<p class="empty">No search results.</p>`;
     return;
@@ -259,17 +325,17 @@ function renderSearchResults(hits: SearchHit[]) {
         <li>
           <button type="button" data-path="${hit.path}">${hit.name}</button>
           <div class="meta">${hit.kind} · ${hit.path}</div>
-          ${hit.summary ? `<div>${hit.summary}</div>` : ""}
         </li>`,
         )
         .join("")}
     </ul>
   `;
+  syncExplorerLayout()
   detailPanel.querySelectorAll("[data-path]").forEach((button) => {
     button.addEventListener("click", () => {
       const path = button.getAttribute("data-path");
       if (path) {
-        void selectPath(path);
+        void selectFile(path);
       }
     });
   });
@@ -297,6 +363,8 @@ async function render() {
     : localStorage.getItem(LAST_FILE_KEY)
       ? `No database loaded (last: ${localStorage.getItem(LAST_FILE_KEY)})`
       : "No database loaded";
+
+  syncExplorerLayout()
 
   if (!state.loaded) {
     treePanel.innerHTML = `<p class="empty">Drop explorer.db here or use Load DB.</p>`;
@@ -338,11 +406,7 @@ async function render() {
     error.textContent = state.error;
     treePanel.appendChild(error);
   }
-  renderTreeNodes(null, treePanel);
-
-  if (!state.selectedPath && !detailPanel.querySelector(".search-results, h2")) {
-    detailPanel.innerHTML = `<p class="empty">Select a file or search to inspect deps and symbols.</p>`
-  }
+  renderTreeNodes(null, treePanel)
 }
 
 async function handleFile(file: File) {
@@ -358,6 +422,8 @@ async function handleFile(file: File) {
   state.inspectTables = [];
   state.expanded.clear();
   state.selectedPath = "";
+  state.detailPath = null
+  state.searchActive = false;
   state.selectedTable = null
   state.tableOffset = 0;
   state.error = "";

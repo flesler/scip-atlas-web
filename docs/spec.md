@@ -8,7 +8,7 @@ Users open **one HTML file**, drop **one** SQLite file, explore. Bytes never lea
 
 ## Product
 
-Accordion tree + FTS + file panel (defined symbols, **deps**, **rdeps**). Click a path to jump (expand ancestors + select). Same for search hits.
+Accordion tree + basename search + file panel (defined symbols, **deps**, **rdeps**). Click a path to jump (expand ancestors + select). Same for search hits.
 
 ## Two artifacts
 
@@ -33,8 +33,8 @@ Sibling repo: `../scip-atlas/` (same parent as this repo). Read these files dire
 | --- | --- | --- |
 | `../scip-atlas/scip_atlas/slim_index.py` | `bin/pack/slim.ts` (or inline in `pack.ts`) | `SlimIndexTable` → `PackTable`, `SlimIndexIndex` → `PackIndex`, `SLIM_INDEX_TABLES`, `SLIM_INDEX_INDEXES`, `index_name`, `create_index_sql`, `create_table_sql`, `copy_table_sql`, `build_slim_index` loop |
 | `../scip-atlas/scip_atlas/project_paths.py` | `bin/pack/paths.ts` | `project_cache_slug`, `_project_root_hash`, `scip_cli_cache_dir`, `resolve_git_root`, `default_index_path`, `default_sidecar_path` (from `schema.py` L146) — **copy logic, no `import scip_cli`** |
-| `../scip-atlas/scip_atlas/schema.py` | `bin/pack/atlas.ts` | `commits` / `files` / `dirs` / `meta` / `search_docs` DDL, `_FTS_CREATE_SQL`, `close_sidecar` WAL checkpoint before reading atlas |
-| `../scip-atlas/scip_atlas/search.py` | (pack only) | FTS rebuild: `INSERT INTO search_docs_fts … SELECT … FROM search_docs` — same columns as `rebuild_search_index` |
+| `../scip-atlas/scip_atlas/schema.py` | `bin/pack/atlas.ts` | Atlas DDL + indexes — mirror `schema.py` exactly; see [tmp/atlas-schema-delta.md](../tmp/atlas-schema-delta.md) |
+| `../scip-atlas/.cursor/skills/scip-atlas/references/schema.md` | — | Column semantics, search rules, no-migration policy |
 | `../scip-atlas/.cursor/skills/scip-atlas/references/slim-index.md` | — | Config → SQL pattern doc; parity checklist |
 | `../scip-atlas/tests/test_slim_index.py` | `tests/pack.test.ts` | Mirror: no `occurrences`, rdeps SQL match, missing source exit, generated index DDL |
 | `../scip-atlas/tests/test_project_paths.py` | `tests/paths.test.ts` | `test_cache_slug_matches_scip_cli` — slug must stay aligned |
@@ -45,10 +45,9 @@ Sibling repo: `../scip-atlas/` (same parent as this repo). Read these files dire
 2. Checkpoint atlas WAL (`schema.close_sidecar` pattern).
 3. Open output `main`; `ATTACH` full index as `scip`, atlas as `atlas`.
 4. For each `SLIM_INDEX_TABLES` entry: `create_table_sql` from `PRAGMA table_info` on `scip`, then `INSERT INTO main.t SELECT cols FROM scip.t`.
-5. For atlas tables (`meta`, `commits`, `files`, `dirs`, `search_docs`): copy all columns from `atlas` into `main` (allowlist = every column present). Copy `commits` before `files`/`dirs` (FK).
-6. Create `SLIM_INDEX_INDEXES` + `idx_dirs_parent` via `PackIndex` helper.
-7. Drop any inherited FTS shadow tables; run `_FTS_CREATE_SQL` + populate from `search_docs`.
-8. Detach, commit, print size line.
+5. For atlas tables (`meta`, `committers`, `commits`, `files`, `dirs`): copy all columns from `atlas` into `main`. Order: `committers` → `commits` → `files`/`dirs`.
+6. Create `SLIM_INDEX_INDEXES` + atlas indexes (`idx_files_name`, `idx_files_folder`, `idx_dirs_name`, `idx_dirs_parent`) via `PackIndex`.
+7. Detach, commit, print size line.
 
 **SPA SQL** in this spec (deps / rdeps / tree / search) is already the consumer contract — same queries as atlas tests and scip-cli.
 
@@ -107,28 +106,27 @@ defn_enclosing_ranges (symbol_id)
 
 ```
 meta
+committers
 commits
 files
 dirs
-search_docs
 ```
 
-Index: `dirs (parent_path)` → `idx_dirs_parent` via the same `PackIndex` helper.
+No FTS. Pack copies atlas indexes on `files.name`, `files.folder`, `dirs.name`, `dirs.parent_path`.
 
-**FTS:** do **not** copy `search_docs_fts` virtual/shadow tables. After `search_docs` is filled:
+### Atlas sidecar schema (copy verbatim into `explorer.db`)
 
-```sql
-CREATE VIRTUAL TABLE search_docs_fts USING fts5(
-    path, kind UNINDEXED, symbol UNINDEXED, name, summary,
-    tokenize='unicode61 remove_diacritics 2'
-);
-INSERT INTO search_docs_fts(rowid, path, kind, symbol, name, summary)
-SELECT rowid, path, kind, symbol, name, summary FROM search_docs;
+```
+meta            git_head, last_sync_at, last_summarize_at, index_fingerprint, atlas_schema_version
+committers      email PK, name
+commits         sha PK, commit_time, committer_email → committers, message
+files           relative_path PK, folder, name, blob_sha, commit_sha, summary, summary_at_sha
+dirs            relative_path PK, name, parent_path, commit_sha, summary, summary_at_sha
 ```
 
-(Match atlas `schema.py` FTS definition.)
+`files.folder` + `files.name` decompose `relative_path` (folder = dirname, `''` for root files). `dirs.name` + `dirs.parent_path` decompose dir path. **Search:** `name LIKE ? || '%'` on `files` and `dirs` only. **`summary_at_sha`:** atlas-only freshness; web displays `summary` as-is (stale OK).
 
-Attach full index as `scip`, atlas as `atlas`, write into `main` (`explorer.db`). No source blob in output. Reject if source `chunks` is missing required location columns. If atlas has no `search_docs`, fail (run `scip-atlas sync` first).
+Attach full index as `scip`, atlas as `atlas`, write into `main` (`explorer.db`). No source blob in output. Reject if source `chunks` has `occurrences`.
 
 Node driver: `better-sqlite3` or Node `node:sqlite` — native, not WASM.
 
@@ -136,7 +134,7 @@ Node driver: `better-sqlite3` or Node `node:sqlite` — native, not WASM.
 
 - Output has no `occurrences` column on `chunks`.
 - Mention PK / rdeps query matches full `index.db` for a fixture file (same SQL as atlas `test_slim_index_file_rdeps_match_full`).
-- Atlas `files` / `dirs` / FTS row counts match source sidecar.
+- Atlas `files` / `dirs` row counts match source sidecar.
 - Missing source → non-zero exit.
 
 ---
@@ -146,7 +144,7 @@ Node driver: `better-sqlite3` or Node `node:sqlite` — native, not WASM.
 | Layer | Choice |
 | --- | --- |
 | Language | TypeScript under `src/**/*.ts` |
-| SQL | `@sqlite.org/sqlite-wasm` from npm (FTS5 required) |
+| SQL | `@sqlite.org/sqlite-wasm` from npm |
 | UI | SPA, CSS in the repo (no UI CDN) |
 | Runtime | Browser only. Queries in a **Worker** |
 | Ship | **Single HTML** — all JS, CSS, and WASM inlined |
@@ -199,8 +197,8 @@ Large files: progress on read; fail clearly if WASM heap cannot hold them. v1 is
 Lazy: children of one parent, not the whole repo.
 
 - Roots: `dirs` where `parent_path IS NULL` (repo root `relative_path = ''`) plus top-level dirs (`parent_path = ''`).
-- Expand a dir: child dirs (`dirs.parent_path = ?`) and **direct** files ( `files` has no `parent_path` — dirname of `relative_path`).
-- Each node: basename, last git author/date/subject, summary if present.
+- Expand dir `P`: child dirs `WHERE parent_path = P`; direct files `WHERE folder = P` (root files: `folder = ''`).
+- Each node: `name`, git author/date/`commits.message`, summary if present.
 
 Empty state until a DB is loaded. Persist last-opened **filename** in `localStorage` only (not file bytes).
 
@@ -217,7 +215,7 @@ Click a path → navigate.
 
 ### Search
 
-Box → `search_docs_fts`. Names/paths first, summaries second. No embeddings.
+Box → prefix match on `files.name` and `dirs.name`. No summaries, no symbols. No embeddings.
 
 ### Chrome
 
@@ -232,7 +230,7 @@ No login. No settings that call the network.
 ```text
 tree(parent)     → roots / children (dirs + files)
 node(path)       → overlay + symbols + deps + rdeps
-search(q)        → FTS hits
+search(q)        → basename prefix hits
 health()         → loaded file, table presence, sizes
 ```
 
@@ -285,24 +283,25 @@ ORDER BY def_d.relative_path
 Direct files under dir `src`:
 
 ```sql
-SELECT f.relative_path, c.author_name, c.commit_time, c.subject, f.summary
+SELECT f.relative_path, f.folder, f.name, ct.name, c.commit_time, c.message, f.summary
 FROM files f
 JOIN commits c ON c.sha = f.commit_sha
-WHERE f.relative_path LIKE 'src/%'
-  AND instr(substr(f.relative_path, 5), '/') = 0
+JOIN committers ct ON ct.email = c.committer_email
+WHERE f.folder = 'src'
 ORDER BY f.relative_path
 ```
 
-Root files: `instr(relative_path, '/') = 0`.
+Root files: `WHERE folder = ''`.
 
-Child dirs: `SELECT … FROM dirs WHERE parent_path = ?`.
+Child dirs under `src`: `WHERE parent_path = 'src'`.
 
-Search:
+Search (basename prefix):
 
 ```sql
-SELECT path, kind, name, summary
-FROM search_docs_fts
-WHERE search_docs_fts MATCH ?
+SELECT relative_path, name, 'file' AS kind FROM files WHERE name LIKE ? || '%'
+UNION ALL
+SELECT relative_path, name, 'dir' AS kind FROM dirs WHERE name LIKE ? || '%'
+ORDER BY relative_path
 LIMIT 50
 ```
 

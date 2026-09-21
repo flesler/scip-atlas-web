@@ -1,23 +1,15 @@
 import Database from "better-sqlite3"
 import fs from "node:fs"
 import path from "node:path"
-import {
-  FTS_CREATE_SQL,
-  FTS_POPULATE_SQL,
-  checkpointAtlas,
-  dropFtsShadowTables,
-  formatSummaryWarning,
-  missingSummaryCoverages,
-} from "./atlas.js"
+import { checkpointAtlas, formatSummaryWarning, missingSummaryCoverages } from "./atlas.js"
 import type { ResolvedPaths } from "./paths.js"
 import {
+  ATLAS_INDEXES,
   ATLAS_TABLES,
   PackError,
   SLIM_INDEX_INDEXES,
   SLIM_INDEX_TABLES,
-  allColumnSpecs,
   columnSpecs,
-  copyAllColumnsSql,
   copyTableSql,
   createIndexSql,
   createTableSql,
@@ -29,8 +21,6 @@ export type PackResult = {
   outputBytes: number;
   outputPath: string;
 };
-
-const DIRS_PARENT_INDEX = { table: "dirs", columns: ["parent_path"] as const };
 
 function formatMb(bytes: number): string {
   return (bytes / (1024 * 1024)).toFixed(1);
@@ -87,8 +77,10 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
         (row) => row.name,
       ),
     );
-    if (!atlasTables.has("search_docs")) {
-      throw new PackError("atlas has no search_docs; run scip-atlas sync first");
+    for (const table of ["committers", "commits", "files", "dirs"]) {
+      if (!atlasTables.has(table)) {
+        throw new PackError(`atlas missing ${table}; run scip-atlas sync first`);
+      }
     }
 
     main.exec(`ATTACH DATABASE '${indexPath.replace(/'/g, "''")}' AS scip`);
@@ -102,11 +94,14 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
       main.exec(copyTableSql(table));
     }
 
-    for (const tableName of ATLAS_TABLES) {
-      const specs = allColumnSpecs({ pragma: (name) => pragmaTableInfo(atlas, name) }, tableName);
-      const columns = specs.map((spec) => spec.name);
-      main.exec(createTableSql({ name: tableName, columns }, specs));
-      main.exec(copyAllColumnsSql(tableName, columns));
+    const atlasPragma = (table: string) => pragmaTableInfo(atlas, table)
+    for (const table of ATLAS_TABLES) {
+      if (!atlasTables.has(table.name)) {
+        throw new PackError(`atlas missing ${table.name}; run scip-atlas sync first`)
+      }
+      const specs = columnSpecs({ pragma: atlasPragma }, table)
+      main.exec(createTableSql(table, specs))
+      main.exec(copyTableSql(table, "atlas"))
     }
 
     const summaryWarning = formatSummaryWarning(missingSummaryCoverages(atlas))
@@ -117,11 +112,9 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
     for (const index of SLIM_INDEX_INDEXES) {
       main.exec(createIndexSql(index));
     }
-    main.exec(createIndexSql(DIRS_PARENT_INDEX));
-
-    dropFtsShadowTables(main);
-    main.exec(FTS_CREATE_SQL);
-    main.exec(FTS_POPULATE_SQL);
+    for (const index of ATLAS_INDEXES) {
+      main.exec(createIndexSql(index));
+    }
 
     main.exec("DETACH DATABASE scip");
     main.exec("DETACH DATABASE atlas");

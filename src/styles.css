@@ -88,6 +88,18 @@ body {
   overflow: hidden;
 }
 
+.layout.layout--tree-only {
+  grid-template-columns: 1fr;
+}
+
+.layout.layout--tree-only .detail {
+  display: none;
+}
+
+.layout.layout--tree-only .panel {
+  border-right: none;
+}
+
 .panel {
   border-right: 1px solid var(--border);
   background: var(--panel);
@@ -102,6 +114,37 @@ body {
   min-width: 0;
   overflow: auto;
   padding: 1rem 1.25rem;
+}
+
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.detail-header h2 {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  word-break: break-word;
+}
+
+.detail-close {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  padding: 0.1rem 0.35rem;
+  cursor: pointer;
+  border-radius: 0.35rem;
+}
+
+.detail-close:hover {
+  color: var(--text);
+  background: var(--accent-soft);
 }
 
 .empty {
@@ -144,9 +187,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 1.75rem;
-  min-height: 1.75rem;
-  padding: 0.35rem;
+  min-width: 1.1rem;
+  min-height: 1.1rem;
+  padding: 0.15rem;
   margin: -0.2rem 0;
   line-height: 1;
   text-align: center;
@@ -156,17 +199,40 @@ body {
 .tree-toggle-spacer {
   flex: none;
   display: inline-block;
-  width: 1.75rem;
-  min-height: 1.75rem;
+  width: 1.1rem;
+  min-height: 1.1rem;
+}
+
+.tree-icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.tree-row:hover .tree-icon,
+.tree-row.selected .tree-icon {
+  color: var(--accent);
 }
 
 .tree-label {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-summary {
   flex: 1;
   min-width: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-children {
-  margin-left: 1rem;
+  margin-left: 0.5rem;
 }
 
 .meta {
@@ -184,8 +250,8 @@ body {
 }
 
 .link-list {
-  list-style: none;
-  padding: 0;
+  list-style: disc;
+  padding-left: 1.25rem;
   margin: 0;
 }
 

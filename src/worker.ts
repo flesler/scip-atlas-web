@@ -55,7 +55,7 @@ function tableNames(conn: Database): string[] {
 
 function detectMode(conn: Database): HealthInfo["mode"] {
   const tables = new Set(tableNames(conn));
-  if (tables.has("files") && tables.has("search_docs_fts") && tables.has("documents")) {
+  if (tables.has("files") && tables.has("committers") && tables.has("documents")) {
     return "explorer";
   }
   return "invalid";
@@ -74,11 +74,8 @@ async function loadDatabase(bytes: ArrayBuffer, fileName: string) {
   rejectFullIndex(conn);
 
   const tables = new Set(tableNames(conn));
-  if (!tables.has("files") || !tables.has("search_docs_fts")) {
+  if (!tables.has("files") || !tables.has("committers") || !tables.has("commits")) {
     throw new Error("expected explorer.db from pack");
-  }
-  if (!tables.has("search_docs")) {
-    throw new Error("search_docs missing; run scip-atlas sync and pack");
   }
 
   const resolvedMode = detectMode(conn);
@@ -107,62 +104,40 @@ function node(pathValue: string): PathDetails {
   const fileOverlay = queryAll<{
     author_name: string
     commit_time: number
-    subject: string
+    message: string
     summary: string | null;
   }>(db, SQL.fileOverlay, pathValue)[0]
-  const dirOverlay = queryAll<{
-    last_author_name: string
-    last_commit_time: number
-    last_subject: string
-    summary: string | null
-  }>(db, SQL.dirOverlay, pathValue)[0]
+  if (!fileOverlay) {
+    throw new Error(`not a file: ${pathValue}`)
+  }
 
-  const kind = fileOverlay ? "file" : "dir"
-  const overlay = fileOverlay
-    ? {
-      author_name: fileOverlay.author_name,
-      commit_time: fileOverlay.commit_time,
-      subject: fileOverlay.subject,
-      summary: fileOverlay.summary,
-    }
-    : dirOverlay
-      ? {
-        author_name: dirOverlay.last_author_name,
-        commit_time: dirOverlay.last_commit_time,
-        subject: dirOverlay.last_subject,
-        summary: dirOverlay.summary,
+  const kind = "file" as const
+  const overlay = {
+    author_name: fileOverlay.author_name,
+    commit_time: fileOverlay.commit_time,
+    message: fileOverlay.message,
+    summary: fileOverlay.summary,
+  }
+
+  const symbols = queryAll<{
+    symbol: string
+    start_line: number
+    end_line: number
+  }>(db, SQL.definedSymbols, pathValue)
+    .map((row) => {
+      const display_name = symbolDisplayName(row.symbol, null)
+      if (!display_name) {
+        return null
       }
-      : null;
-
-  const symbols =
-    kind === "file"
-      ? queryAll<{
-        display_name: string | null
-        symbol: string
-        start_line: number
-        end_line: number
-      }>(db, SQL.definedSymbols, pathValue)
-        .map((row) => {
-          const display_name = symbolDisplayName(row.symbol, row.display_name)
-          if (!display_name) {
-            return null
-          }
-            return { ...row, display_name }
-          })
-        .filter((row): row is SymbolRow => row !== null)
-      : [];
+      return { ...row, display_name }
+    })
+    .filter((row): row is SymbolRow => row !== null)
 
   if (!mentionsPresent) {
     throw new Error("mentions table missing; run pack / rebuild");
   }
-  const deps =
-    kind === "file"
-      ? queryAll<{ relative_path: string }>(db, SQL.deps, pathValue, pathValue).map((row) => row.relative_path)
-      : []
-  const rdeps =
-    kind === "file"
-      ? queryAll<{ relative_path: string }>(db, SQL.rdeps, pathValue, pathValue).map((row) => row.relative_path)
-      : []
+  const deps = queryAll<{ relative_path: string }>(db, SQL.deps, pathValue, pathValue).map((row) => row.relative_path)
+  const rdeps = queryAll<{ relative_path: string }>(db, SQL.rdeps, pathValue, pathValue).map((row) => row.relative_path)
   return { path: pathValue, kind, overlay, symbols, deps, rdeps }
 }
 
@@ -192,7 +167,7 @@ function search(query: string): SearchHit[] {
   if (!term) {
     return [];
   }
-  return queryAll<SearchHit>(db, SQL.search, term);
+  return queryAll<SearchHit>(db, SQL.search, term, term)
 }
 
 function health(): HealthInfo {

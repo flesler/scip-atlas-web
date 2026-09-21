@@ -30,15 +30,15 @@ afterEach(() => {
 });
 
 describe("inspect", () => {
-  it("lists browsable tables without fts shadow tables", () => {
+  it("lists atlas and scip tables from explorer.db", () => {
     const db = openExplorer();
     const query = ((sql: string, ...bind: unknown[]) => db.prepare(sql).all(...bind)) as QueryAll;
     const tables = listTables(query);
     db.close();
 
     expect(tables.some((table) => table.name === "files")).toBe(true);
-    expect(tables.some((table) => table.name === "search_docs_fts")).toBe(true);
-    expect(tables.some((table) => table.name === "search_docs_fts_data")).toBe(false);
+    expect(tables.some((table) => table.name === "committers")).toBe(true)
+    expect(tables.some((table) => table.name === "documents")).toBe(true);
   });
 
   it("groups tables into scip-cli, scip-atlas, and other", () => {
@@ -52,7 +52,7 @@ describe("inspect", () => {
       expect.arrayContaining(["documents", "mentions", "chunks", "global_symbols", "defn_enclosing_ranges"]),
     );
     expect(byId.get("scip-atlas")).toEqual(
-      expect.arrayContaining(["meta", "commits", "files", "dirs", "search_docs", "search_docs_fts"]),
+      expect.arrayContaining(["committers", "commits", "files", "dirs"]),
     );
     expect(byId.has("other")).toBe(false);
   });

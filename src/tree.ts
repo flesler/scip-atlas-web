@@ -9,80 +9,36 @@ export function treeCacheKey(parent: string | null): string {
 
 export type QueryAll = <T extends Record<string, unknown>>(sql: string, ...bind: unknown[]) => T[];
 
+type TreeRow = {
+  relative_path: string;
+  summary: string | null;
+};
+
+function toNode(row: TreeRow, kind: "dir" | "file"): TreeNode {
+  return {
+    path: row.relative_path,
+    kind,
+    summary: row.summary,
+  };
+}
+
 export function listTree(queryAll: QueryAll, parent: string | null): TreeNode[] {
   const nodes: TreeNode[] = [];
   if (parent === null) {
-    const dirs = queryAll<{
-      relative_path: string;
-      last_author_name: string | null;
-      last_commit_time: number | null;
-      last_subject: string | null;
-      summary: string | null;
-    }>(SQL.roots);
-    for (const dir of dirs) {
-      nodes.push({
-        path: dir.relative_path,
-        kind: "dir",
-        author: dir.last_author_name,
-        commitTime: dir.last_commit_time,
-        subject: dir.last_subject,
-        summary: dir.summary,
-      });
+    for (const dir of queryAll<TreeRow>(SQL.roots)) {
+      nodes.push(toNode(dir, "dir"));
     }
-    const files = queryAll<{
-      relative_path: string;
-      author_name: string;
-      commit_time: number;
-      subject: string;
-      summary: string | null;
-    }>(SQL.rootFiles);
-    for (const file of files) {
-      nodes.push({
-        path: file.relative_path,
-        kind: "file",
-        author: file.author_name,
-        commitTime: file.commit_time,
-        subject: file.subject,
-        summary: file.summary,
-      });
+    for (const file of queryAll<TreeRow>(SQL.rootFiles)) {
+      nodes.push(toNode(file, "file"));
     }
     return nodes;
   }
 
-  const childDirs = queryAll<{
-    relative_path: string;
-    last_author_name: string | null;
-    last_commit_time: number | null;
-    last_subject: string | null;
-    summary: string | null;
-  }>(SQL.childDirs, parent);
-  for (const dir of childDirs) {
-    nodes.push({
-      path: dir.relative_path,
-      kind: "dir",
-      author: dir.last_author_name,
-      commitTime: dir.last_commit_time,
-      subject: dir.last_subject,
-      summary: dir.summary,
-    });
+  for (const dir of queryAll<TreeRow>(SQL.childDirs, parent)) {
+    nodes.push(toNode(dir, "dir"));
   }
-
-  const childFiles = queryAll<{
-    relative_path: string;
-    author_name: string;
-    commit_time: number;
-    subject: string;
-    summary: string | null;
-  }>(SQL.childFiles, `${parent}/%`, parent);
-  for (const file of childFiles) {
-    nodes.push({
-      path: file.relative_path,
-      kind: "file",
-      author: file.author_name,
-      commitTime: file.commit_time,
-      subject: file.subject,
-      summary: file.summary,
-    });
+  for (const file of queryAll<TreeRow>(SQL.childFiles, parent)) {
+    nodes.push(toNode(file, "file"));
   }
   return nodes;
 }
