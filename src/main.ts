@@ -17,12 +17,9 @@ import type { PathDetails, SearchHit, TreeNode, ViewMode } from "./types.js"
 import { renderDbDetails, renderDbTableList } from "./ui-db.js"
 import DbWorker from "./worker.ts?worker&inline"
 
-const LAST_FILE_KEY = "scip-atlas-web:last-file";
-
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const state = {
   loaded: false,
-  fileName: "",
   viewMode: "explorer" as ViewMode,
   expanded: new Set<string>(),
   selectedPath: "",
@@ -42,32 +39,67 @@ initDbClient(new DbWorker());
 
 app.innerHTML = `
   <header class="toolbar">
-    <label class="button primary">
-      Load DB
-      <input id="db-input" type="file" accept=".db,.gz" hidden />
-    </label>
-    <input id="search-input" type="search" placeholder="Search names" />
+    <input
+      id="search-input"
+      type="search"
+      placeholder="Search names"
+      title="Find files and folders by name prefix. Enter opens the first match; Esc restores the tree."
+      disabled
+    />
     <div class="view-toggle" role="tablist" aria-label="View mode">
-      <button id="view-explorer" type="button" class="active" role="tab" aria-selected="true">Explorer</button>
-      <button id="view-db" type="button" role="tab" aria-selected="false">DB</button>
+      <button
+        id="view-explorer"
+        type="button"
+        class="active"
+        role="tab"
+        aria-selected="true"
+        title="Browse the repo tree; select a file to see symbols, imports, and importers."
+        disabled
+      >Explorer</button>
+      <button
+        id="view-db"
+        type="button"
+        role="tab"
+        aria-selected="false"
+        title="Browse raw SQLite tables in the loaded explorer.db (debug view)."
+        disabled
+      >DB</button>
     </div>
-    <button id="download-btn" type="button" aria-label="Download this app">Download</button>
-    <div class="status" id="status">No database loaded</div>
+    <button
+      id="download-btn"
+      type="button"
+      aria-label="Download offline app"
+      title="Save this explorer as a single HTML file for offline use (open via file://). Does not include your database—you load explorer.db separately each time."
+    >Download offline</button>
   </header>
-  <div class="layout">
+  <div class="layout layout--awaiting-db">
+    <div
+      class="load-screen"
+      id="load-screen"
+      title="Drop explorer.db or explorer.db.gz anywhere on the page to load it."
+    >
+      <label
+        class="button primary load-button"
+        title="Choose explorer.db or explorer.db.gz from the pack CLI. Data stays in your browser only; reload the page to switch databases."
+      >
+        Load explorer DB file
+        <input id="db-input" type="file" accept=".db,.gz" hidden />
+      </label>
+      <p class="meta">or drop explorer.db / explorer.db.gz here</p>
+    </div>
     <aside class="panel" id="tree-panel"></aside>
     <main class="detail" id="detail-panel"></main>
   </div>
 `;
 
 const dbInput = app.querySelector<HTMLInputElement>("#db-input")!;
-const searchInput = app.querySelector<HTMLInputElement>("#search-input")!;
-const statusEl = app.querySelector<HTMLDivElement>("#status")!;
+const searchInput = app.querySelector<HTMLInputElement>("#search-input")!
 const treePanel = app.querySelector<HTMLDivElement>("#tree-panel")!;
 const detailPanel = app.querySelector<HTMLDivElement>("#detail-panel")!;
 const viewExplorerBtn = app.querySelector<HTMLButtonElement>("#view-explorer")!
 const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!
 const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
+const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
 
 function basename(path: string): string {
   const parts = path.split("/");
@@ -103,6 +135,33 @@ async function ensureChildren(parent: string | null): Promise<TreeNode[]> {
   return nodes;
 }
 
+async function autoExpandSingletonChain(parent: string | null): Promise<TreeNode | null> {
+  const children = state.treeCache.get(treeCacheKey(parent)) ?? await ensureChildren(parent)
+  if (children.length !== 1) {
+    return null
+  }
+  const child = children[0]
+  if (child.kind === "dir") {
+    state.expanded.add(child.path)
+    await ensureChildren(child.path)
+    const deeper = await autoExpandSingletonChain(child.path)
+    return deeper ?? child
+  }
+  return child
+}
+
+async function runInitialTreeExpand() {
+  await ensureChildren(null)
+  const leaf = await autoExpandSingletonChain(null)
+  if (leaf?.kind === "file") {
+    await selectFile(leaf.path)
+    return
+  }
+  if (leaf?.kind === "dir") {
+    state.selectedPath = leaf.path
+  }
+}
+
 async function expandAncestors(path: string) {
   const parts = path.split("/");
   let current = "";
@@ -120,13 +179,14 @@ async function expandAncestors(path: string) {
   }
 }
 
-async function toggleDir(path: string) {
+async function toggleDir(path: string): Promise<TreeNode | null> {
   if (state.expanded.has(path)) {
     state.expanded.delete(path)
-    return
+    return null
   }
   state.expanded.add(path)
   await ensureChildren(path)
+  return autoExpandSingletonChain(path)
 }
 
 function syncExplorerLayout() {
@@ -148,7 +208,7 @@ function scrollDetailPanelToTop() {
 
 function scrollSelectedTreeItemIntoView() {
   treePanel.querySelector<HTMLElement>(".tree-row.selected")?.scrollIntoView({
-    block: "nearest",
+    block: "center",
     behavior: "smooth",
   })
 }
@@ -236,8 +296,12 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
 
     row.addEventListener("click", async () => {
       if (node.kind === "dir") {
-        await toggleDir(node.path)
-        await selectDir(node.path)
+        const leaf = await toggleDir(node.path)
+        if (leaf?.kind === "file") {
+          await selectFile(leaf.path)
+          return
+        }
+        await selectDir(leaf?.path ?? node.path)
         return
       }
       await selectFile(node.path)
@@ -264,7 +328,7 @@ function renderDetails(details: PathDetails) {
   detailPanel.innerHTML = `
     <div class="detail-header">
       <h2>${details.path}</h2>
-      <button type="button" class="detail-close" aria-label="Close file panel">×</button>
+      <button type="button" class="detail-close" aria-label="Close file panel" title="Close file details and expand the tree to full width.">×</button>
     </div>
     <p class="meta">file${meta ? ` · ${meta}` : ""}</p>
     ${overlay?.summary ? `<p>${overlay.summary}</p>` : ""}
@@ -452,7 +516,15 @@ function setViewMode(mode: ViewMode) {
   viewDbBtn.classList.toggle("active", mode === "db")
   viewExplorerBtn.setAttribute("aria-selected", mode === "explorer" ? "true" : "false")
   viewDbBtn.setAttribute("aria-selected", mode === "db" ? "true" : "false")
-  searchInput.disabled = mode === "db"
+  searchInput.disabled = !state.loaded || mode === "db"
+}
+
+function syncLoadChrome() {
+  loadScreen.hidden = state.loaded
+  layoutEl.classList.toggle("layout--awaiting-db", !state.loaded)
+  searchInput.disabled = !state.loaded || state.viewMode === "db"
+  viewExplorerBtn.disabled = !state.loaded
+  viewDbBtn.disabled = !state.loaded
 }
 
 async function selectTable(table: string, offset = 0) {
@@ -463,17 +535,12 @@ async function selectTable(table: string, offset = 0) {
 }
 
 async function render() {
-  statusEl.textContent = state.loaded
-    ? `${state.fileName} loaded`
-    : localStorage.getItem(LAST_FILE_KEY)
-      ? `No database loaded (last: ${localStorage.getItem(LAST_FILE_KEY)})`
-      : "No database loaded";
-
+  syncLoadChrome()
   syncExplorerLayout()
 
   if (!state.loaded) {
-    treePanel.innerHTML = `<p class="empty">Drop explorer.db or explorer.db.gz here or use Load DB.</p>`;
-    detailPanel.innerHTML = `<p class="empty">Load a packed explorer.db to browse the repo.</p>`;
+    treePanel.innerHTML = ""
+    detailPanel.innerHTML = "";
     return;
   }
 
@@ -520,14 +587,16 @@ async function render() {
 }
 
 async function handleFile(file: File) {
+  if (state.loaded) {
+    return
+  }
   const lower = file.name.toLowerCase();
   if (lower.endsWith("-wal") || lower.endsWith("-shm")) {
     throw new Error("load explorer.db, not -wal or -shm sidecars");
   }
   const bytes = await file.arrayBuffer();
-  const health = await loadDatabase(bytes, file.name);
+  await loadDatabase(bytes, file.name);
   state.loaded = true;
-  state.fileName = file.name;
   state.treeCache.clear();
   state.inspectTables = [];
   state.expanded.clear();
@@ -540,9 +609,11 @@ async function handleFile(file: File) {
   state.selectedTable = null
   state.tableOffset = 0;
   state.error = "";
-  localStorage.setItem(LAST_FILE_KEY, file.name);
-  statusEl.textContent = `${file.name} · ${(health.bytes / (1024 * 1024)).toFixed(1)} MB`;
-  await render();
+  syncLoadChrome()
+  await runInitialTreeExpand()
+  if (!state.detailPath) {
+    await render();
+  }
 }
 
 dbInput.addEventListener("change", () => {
@@ -607,6 +678,9 @@ document.body.addEventListener("dragover", (event) => {
 
 document.body.addEventListener("drop", (event) => {
   event.preventDefault();
+  if (state.loaded) {
+    return
+  }
   const file = event.dataTransfer?.files?.[0];
   if (!file) {
     return;
@@ -618,7 +692,6 @@ void fetchHealth()
   .then((health) => {
     if (health.loaded) {
       state.loaded = true;
-      state.fileName = health.fileName ?? "";
     }
   })
   .catch(() => {})

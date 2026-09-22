@@ -68,13 +68,16 @@ export const SQL = {
     ORDER BY d.relative_path
   `,
   search: `
-    SELECT relative_path AS path, name, 'file' AS kind, summary
-    FROM files
-    WHERE name LIKE ? || '%'
-    UNION ALL
-    SELECT relative_path AS path, name, 'dir' AS kind, summary
-    FROM dirs
-    WHERE name LIKE ? || '%'
+    SELECT path, name, kind, summary
+    FROM (
+      SELECT relative_path AS path, name, 'file' AS kind, summary
+      FROM files
+      WHERE name LIKE ? || '%'
+      UNION ALL
+      SELECT relative_path AS path, name, 'dir' AS kind, summary
+      FROM dirs
+      WHERE name LIKE ? || '%'
+    )
     ORDER BY CASE kind WHEN 'file' THEN 0 ELSE 1 END, path
     LIMIT 50
   `,

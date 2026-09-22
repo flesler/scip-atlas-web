@@ -114,6 +114,7 @@ function appendRowsSection(container: HTMLElement, data: InspectRows, onPage: (n
     const prev = document.createElement("button");
     prev.type = "button";
     prev.textContent = "Previous";
+    prev.title = "Show the previous page of rows.";
     prev.addEventListener("click", () => {
       onPage(Math.max(0, data.offset - data.limit));
     });
@@ -123,6 +124,7 @@ function appendRowsSection(container: HTMLElement, data: InspectRows, onPage: (n
     const next = document.createElement("button");
     next.type = "button";
     next.textContent = "Next";
+    next.title = "Show the next page of rows.";
     next.addEventListener("click", () => {
       onPage(data.offset + data.limit);
     });

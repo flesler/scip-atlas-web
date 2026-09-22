@@ -32,8 +32,6 @@ test("loads explorer.db and navigates tree without errors", async ({ page }) => 
   const dbPath = buildFixtureDb();
   await page.goto("/");
   await page.locator("#db-input").setInputFiles(dbPath);
-  await expect(page.locator("#status")).toContainText("explorer.db");
-
   const treeRows = page.locator(".tree-row");
   await expect(treeRows.first()).toBeVisible();
 
