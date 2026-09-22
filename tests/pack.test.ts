@@ -117,6 +117,7 @@ describe("buildExplorerDb", () => {
     expect(symbolCols.has("display_name")).toBe(false)
     expect(symbolCols.has("kind")).toBe(false)
     const fileCols = new Set((conn.pragma("table_info(files)") as { name: string }[]).map((row) => row.name))
+    expect(fileCols.has("folder")).toBe(false)
     expect(fileCols.has("blob_sha")).toBe(false)
     expect(fileCols.has("summary_at_sha")).toBe(false);
     expect(mentionPk).toContain("PRIMARY KEY (chunk_id, symbol_id, role)");

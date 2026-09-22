@@ -16,13 +16,14 @@ export const SQL = {
   childFiles: `
     SELECT ${tableCols("f", TREE_FILE)}
     FROM files f
-    WHERE f.folder = ?
+    WHERE f.relative_path LIKE ? || '/%'
+      AND instr(substr(f.relative_path, length(?) + 2), '/') = 0
     ORDER BY f.relative_path
   `,
   rootFiles: `
     SELECT ${tableCols("f", TREE_FILE)}
     FROM files f
-    WHERE f.folder = ''
+    WHERE instr(f.relative_path, '/') = 0
     ORDER BY f.relative_path
   `,
   fileOverlay: `
@@ -67,14 +68,14 @@ export const SQL = {
     ORDER BY d.relative_path
   `,
   search: `
-    SELECT relative_path AS path, name, 'file' AS kind
+    SELECT relative_path AS path, name, 'file' AS kind, summary
     FROM files
     WHERE name LIKE ? || '%'
     UNION ALL
-    SELECT relative_path AS path, name, 'dir' AS kind
+    SELECT relative_path AS path, name, 'dir' AS kind, summary
     FROM dirs
     WHERE name LIKE ? || '%'
-    ORDER BY path
+    ORDER BY CASE kind WHEN 'file' THEN 0 ELSE 1 END, path
     LIMIT 50
   `,
   tableNames: `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,

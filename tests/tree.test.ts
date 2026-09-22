@@ -50,6 +50,24 @@ describe("listTree", () => {
     expect(treeCacheKey(null)).not.toBe(treeCacheKey(""));
   });
 
+  it("lists direct files under a dir without files.folder", () => {
+    const db = openExplorer()
+    const query = ((sql: string, ...bind: unknown[]) => queryAll(db, sql, ...bind)) as QueryAll
+    const expected = queryAll<{ relative_path: string }>(
+      db,
+      `SELECT relative_path FROM files
+       WHERE relative_path LIKE 'src/%'
+         AND instr(substr(relative_path, length('src') + 2), '/') = 0
+       ORDER BY relative_path`,
+    ).map((row) => row.relative_path)
+    const srcFiles = listTree(query, "src").filter((node) => node.kind === "file")
+
+    db.close()
+
+    expect(srcFiles.map((node) => node.path)).toEqual(expected)
+    expect(srcFiles.length).toBeGreaterThan(0)
+  });
+
   it("does not recurse infinitely when repo root is expanded", () => {
     const db = openExplorer();
     const query = ((sql: string, ...bind: unknown[]) => queryAll(db, sql, ...bind)) as QueryAll;

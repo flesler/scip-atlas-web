@@ -46,7 +46,7 @@ Sibling repo: `../scip-atlas/` (same parent as this repo). Read these files dire
 3. Open output `main`; `ATTACH` full index as `scip`, atlas as `atlas`.
 4. For each `SLIM_INDEX_TABLES` entry: `create_table_sql` from `PRAGMA table_info` on `scip`, then `INSERT INTO main.t SELECT cols FROM scip.t`.
 5. For atlas tables (`meta`, `committers`, `commits`, `files`, `dirs`): copy all columns from `atlas` into `main`. Order: `committers` → `commits` → `files`/`dirs`.
-6. Create `SLIM_INDEX_INDEXES` + atlas indexes (`idx_files_name`, `idx_files_folder`, `idx_dirs_name`, `idx_dirs_parent`) via `PackIndex`.
+6. Create `EXPLORER_SCIP_INDEXES` + atlas indexes (`idx_files_name`, `idx_dirs_name`, `idx_dirs_parent`) via `PackIndex`.
 7. Detach, commit, print size line.
 
 **SPA SQL** in this spec (deps / rdeps / tree / search) is already the consumer contract — same queries as atlas tests and scip-cli.
@@ -112,7 +112,7 @@ files
 dirs
 ```
 
-No FTS. Pack copies atlas indexes on `files.name`, `files.folder`, `dirs.name`, `dirs.parent_path`.
+No FTS. Pack copies atlas indexes on `files.name`, `dirs.name`, `dirs.parent_path`.
 
 ### Atlas sidecar schema (copy verbatim into `explorer.db`)
 
@@ -120,11 +120,11 @@ No FTS. Pack copies atlas indexes on `files.name`, `files.folder`, `dirs.name`, 
 meta            git_head, last_sync_at, last_summarize_at, index_fingerprint, atlas_schema_version
 committers      email PK, name
 commits         sha PK, commit_time, committer_email → committers, message
-files           relative_path PK, folder, name, blob_sha, commit_sha, summary, summary_at_sha
-dirs            relative_path PK, name, parent_path, commit_sha, summary, summary_at_sha
+files           relative_path PK, name, commit_sha, summary
+dirs            relative_path PK, name, parent_path, commit_sha, summary
 ```
 
-`files.folder` + `files.name` decompose `relative_path` (folder = dirname, `''` for root files). `dirs.name` + `dirs.parent_path` decompose dir path. **Search:** `name LIKE ? || '%'` on `files` and `dirs` only. **`summary_at_sha`:** atlas-only freshness; web displays `summary` as-is (stale OK).
+`files.name` is basename for prefix search; parent dir is `dirname(relative_path)` at query time (not stored). `dirs.name` + `dirs.parent_path` decompose dir path. **Search:** `name LIKE ? || '%'` on `files` and `dirs` only.
 
 Attach full index as `scip`, atlas as `atlas`, write into `main` (`explorer.db`). No source blob in output. Reject if source `chunks` has `occurrences`.
 
@@ -197,7 +197,7 @@ Large files: progress on read; fail clearly if WASM heap cannot hold them. v1 is
 Lazy: children of one parent, not the whole repo.
 
 - Roots: `dirs` where `parent_path IS NULL` (repo root `relative_path = ''`) plus top-level dirs (`parent_path = ''`).
-- Expand dir `P`: child dirs `WHERE parent_path = P`; direct files `WHERE folder = P` (root files: `folder = ''`).
+- Expand dir `P`: child dirs `WHERE parent_path = P`; direct files via `relative_path` prefix (root files: no `/` in path).
 - Each node: `name`, git author/date/`commits.message`, summary if present.
 
 Empty state until a DB is loaded. Persist last-opened **filename** in `localStorage` only (not file bytes).
@@ -283,25 +283,26 @@ ORDER BY def_d.relative_path
 Direct files under dir `src`:
 
 ```sql
-SELECT f.relative_path, f.folder, f.name, ct.name, c.commit_time, c.message, f.summary
+SELECT f.relative_path, f.name, ct.name, c.commit_time, c.message, f.summary
 FROM files f
 JOIN commits c ON c.sha = f.commit_sha
 JOIN committers ct ON ct.email = c.committer_email
-WHERE f.folder = 'src'
+WHERE f.relative_path LIKE 'src/%'
+  AND instr(substr(f.relative_path, length('src') + 2), '/') = 0
 ORDER BY f.relative_path
 ```
 
-Root files: `WHERE folder = ''`.
+Root files: `WHERE instr(relative_path, '/') = 0`.
 
 Child dirs under `src`: `WHERE parent_path = 'src'`.
 
 Search (basename prefix):
 
 ```sql
-SELECT relative_path, name, 'file' AS kind FROM files WHERE name LIKE ? || '%'
+SELECT relative_path AS path, name, 'file' AS kind, summary FROM files WHERE name LIKE ? || '%'
 UNION ALL
-SELECT relative_path, name, 'dir' AS kind FROM dirs WHERE name LIKE ? || '%'
-ORDER BY relative_path
+SELECT relative_path AS path, name, 'dir' AS kind, summary FROM dirs WHERE name LIKE ? || '%'
+ORDER BY CASE kind WHEN 'file' THEN 0 ELSE 1 END, path
 LIMIT 50
 ```
 

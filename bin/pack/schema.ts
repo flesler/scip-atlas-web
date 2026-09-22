@@ -21,13 +21,12 @@ export const EXPLORER_SCIP_INDEXES: readonly PackIndex[] = [
 export const EXPLORER_ATLAS_TABLES: readonly PackTable[] = [
   { name: "committers", columns: ["email", "name"] },
   { name: "commits", columns: ["sha", "commit_time", "committer_email", "message"] },
-  { name: "files", columns: ["relative_path", "folder", "name", "commit_sha", "summary"] },
+  { name: "files", columns: ["relative_path", "name", "commit_sha", "summary"] },
   { name: "dirs", columns: ["relative_path", "name", "parent_path", "commit_sha", "summary"] },
 ]
 
 export const EXPLORER_ATLAS_INDEXES: readonly PackIndex[] = [
   { table: "files", columns: ["name"] },
-  { table: "files", columns: ["folder"] },
   { table: "dirs", columns: ["name"] },
   { table: "dirs", columns: ["parent_path"] },
 ]

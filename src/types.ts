@@ -53,8 +53,9 @@ export type InspectRows = {
 
 export type SearchHit = {
   path: string;
-  kind: string;
+  kind: "file" | "dir";
   name: string;
+  summary: string | null
 };
 
 export type HealthInfo = {

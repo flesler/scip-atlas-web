@@ -37,7 +37,7 @@ export function listTree(queryAll: QueryAll, parent: string | null): TreeNode[] 
   for (const dir of queryAll<TreeRow>(SQL.childDirs, parent)) {
     nodes.push(toNode(dir, "dir"));
   }
-  for (const file of queryAll<TreeRow>(SQL.childFiles, parent)) {
+  for (const file of queryAll<TreeRow>(SQL.childFiles, parent, parent)) {
     nodes.push(toNode(file, "file"));
   }
   return nodes;

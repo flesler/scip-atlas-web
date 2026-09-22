@@ -28,6 +28,9 @@ const state = {
   selectedPath: "",
   detailPath: null as string | null,
   searchActive: false,
+  searchQuery: "",
+  searchHits: [] as SearchHit[],
+  searchRestore: null as { expanded: string[]; selectedPath: string; detailPath: string | null } | null,
   selectedTable: null as string | null,
   tableOffset: 0,
   inspectTables: [] as Awaited<ReturnType<typeof fetchInspectTables>>,
@@ -129,7 +132,7 @@ async function toggleDir(path: string) {
 function syncExplorerLayout() {
   layoutEl.classList.toggle(
     "layout--tree-only",
-    state.viewMode === "explorer" && !state.detailPath && !state.searchActive,
+    state.viewMode === "explorer" && (!state.detailPath || state.searchActive),
   )
 }
 
@@ -309,36 +312,138 @@ function renderPathList(paths: string[]): string {
     .join("")}</ul>`;
 }
 
-function renderSearchResults(hits: SearchHit[]) {
-  state.searchActive = true
-  state.detailPath = null
-  if (!hits.length) {
-    detailPanel.innerHTML = `<p class="empty">No search results.</p>`;
-    return;
+function beginSearchIfNeeded() {
+  if (state.searchRestore) {
+    return
   }
-  detailPanel.innerHTML = `
-    <h2>Search</h2>
-    <ul class="search-results">
-      ${hits
-        .map(
-          (hit) => `
-        <li>
-          <button type="button" data-path="${hit.path}">${hit.name}</button>
-          <div class="meta">${hit.kind} · ${hit.path}</div>
-        </li>`,
-        )
-        .join("")}
-    </ul>
-  `;
-  syncExplorerLayout()
-  detailPanel.querySelectorAll("[data-path]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const path = button.getAttribute("data-path");
-      if (path) {
-        void selectFile(path);
-      }
-    });
-  });
+  state.searchRestore = {
+    expanded: [...state.expanded],
+    selectedPath: state.selectedPath,
+    detailPath: state.detailPath,
+  }
+  state.detailPath = null
+  hideDetailPanel()
+}
+
+function clearSearch(restore = true) {
+  searchInput.value = ""
+  state.searchQuery = ""
+  state.searchHits = []
+  state.searchActive = false
+  if (restore && state.searchRestore) {
+    state.expanded = new Set(state.searchRestore.expanded)
+    state.selectedPath = state.searchRestore.selectedPath
+    state.detailPath = state.searchRestore.detailPath
+  }
+  state.searchRestore = null
+}
+
+async function restoreDetailIfOpen() {
+  if (!state.detailPath) {
+    hideDetailPanel()
+    return
+  }
+  try {
+    const details = await fetchNode(state.detailPath)
+    if (details.kind === "file") {
+      renderDetails(details)
+      syncExplorerLayout()
+      return
+    }
+    hideDetailPanel()
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function finishSearchClear(restore = true) {
+  clearSearch(restore)
+  await render()
+  await restoreDetailIfOpen()
+}
+
+async function pickSearchHit(hit: SearchHit) {
+  clearSearch(true)
+  if (hit.kind === "file") {
+    await selectFile(hit.path)
+    return
+  }
+  await selectDir(hit.path)
+}
+
+function renderSearchResultsList(container: HTMLElement, hits: SearchHit[]) {
+  if (!hits.length) {
+    container.innerHTML = `<p class="empty">No matches for "${state.searchQuery}".</p>`
+    return
+  }
+  const list = document.createElement("ul")
+  list.className = "search-results"
+  for (const hit of hits) {
+    const item = document.createElement("li")
+    const row = document.createElement("button")
+    row.type = "button"
+    row.className = "search-result-row"
+    row.appendChild(createTreeIcon(hit.kind))
+
+    const label = document.createElement("span")
+    label.className = "search-result-name"
+    label.textContent = hit.name
+    row.appendChild(label)
+
+    const path = document.createElement("span")
+    path.className = "search-result-path"
+    path.textContent = hit.path
+    row.appendChild(path)
+
+    if (hit.summary) {
+      const summary = document.createElement("span")
+      summary.className = "search-result-summary"
+      summary.textContent = hit.summary
+      summary.title = hit.summary
+      row.appendChild(summary)
+    }
+
+    row.addEventListener("click", () => {
+      void pickSearchHit(hit)
+    })
+    item.appendChild(row)
+    list.appendChild(item)
+  }
+  container.appendChild(list)
+}
+
+let searchTimer: number | undefined
+let searchSeq = 0
+
+function scheduleSearch(query: string) {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(() => {
+    void runSearch(query)
+  }, 150)
+}
+
+async function runSearch(query: string) {
+  if (!state.loaded) {
+    return
+  }
+  const seq = ++searchSeq
+  state.searchQuery = query
+  state.searchActive = true
+  beginSearchIfNeeded()
+  try {
+    const hits = await searchDatabase(query)
+    if (seq !== searchSeq) {
+      return
+    }
+    state.searchHits = hits
+    state.error = ""
+    await render()
+  } catch (error) {
+    if (seq !== searchSeq) {
+      return
+    }
+    setError(error instanceof Error ? error.message : String(error))
+  }
 }
 
 function setViewMode(mode: ViewMode) {
@@ -406,6 +511,11 @@ async function render() {
     error.textContent = state.error;
     treePanel.appendChild(error);
   }
+  if (state.searchActive && state.searchQuery) {
+    renderSearchResultsList(treePanel, state.searchHits)
+    syncExplorerLayout()
+    return
+  }
   renderTreeNodes(null, treePanel)
 }
 
@@ -424,6 +534,9 @@ async function handleFile(file: File) {
   state.selectedPath = "";
   state.detailPath = null
   state.searchActive = false;
+  state.searchQuery = ""
+  state.searchHits = []
+  state.searchRestore = null;
   state.selectedTable = null
   state.tableOffset = 0;
   state.error = "";
@@ -440,17 +553,38 @@ dbInput.addEventListener("change", () => {
   void handleFile(file).catch((error) => setError(error instanceof Error ? error.message : String(error)));
 });
 
+searchInput.addEventListener("input", () => {
+  const query = searchInput.value.trim()
+  if (!query) {
+    void finishSearchClear(true)
+    return
+  }
+  scheduleSearch(query)
+})
+
 searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault()
+    void finishSearchClear(true)
+    return
+  }
   if (event.key !== "Enter") {
-    return;
+    return
   }
-  const query = searchInput.value.trim();
-  if (!query || !state.loaded) {
-    return;
+  event.preventDefault()
+  const hits = state.searchHits
+  if (!hits.length) {
+    const query = searchInput.value.trim()
+    if (query) {
+      void runSearch(query).then(() => {
+        if (state.searchHits[0]) {
+          void pickSearchHit(state.searchHits[0])
+        }
+      })
+    }
+    return
   }
-  void searchDatabase(query)
-    .then((hits) => renderSearchResults(hits))
-    .catch((error) => setError(error instanceof Error ? error.message : String(error)));
+  void pickSearchHit(hits[0])
 });
 
 viewExplorerBtn.addEventListener("click", () => {
