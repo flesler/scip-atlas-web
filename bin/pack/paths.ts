@@ -47,6 +47,20 @@ export function defaultOutputPath(atlasPath: string): string {
   return path.join(path.dirname(atlasPath), EXPLORER_DB);
 }
 
+export function compressedOutputPath(outputPath: string): string {
+  if (outputPath.endsWith(".gz")) {
+    return outputPath;
+  }
+  return `${outputPath}.gz`;
+}
+
+export function explorerDbPath(outputPath: string): string {
+  if (outputPath.endsWith(".gz")) {
+    return outputPath.slice(0, -3);
+  }
+  return outputPath;
+}
+
 export function resolveGitRoot(start?: string): string {
   const base = path.resolve(start ?? process.cwd());
   try {

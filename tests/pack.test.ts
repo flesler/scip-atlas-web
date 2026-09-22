@@ -3,13 +3,13 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { gunzipSync } from "node:zlib"
 import { afterEach, describe, expect, it } from "vitest"
 import { formatSummaryWarning, missingSummaryCoverages } from "../bin/pack/atlas.js"
 import { buildExplorerDb } from "../bin/pack/build.js"
+import { EXPLORER_ATLAS_TABLES, EXPLORER_SCIP_INDEXES, EXPLORER_SCIP_TABLES } from "../bin/pack/schema.js"
 import {
-  ATLAS_TABLES,
-  PackError, SLIM_INDEX_INDEXES,
-  SLIM_INDEX_TABLES,
+  PackError,
   copyTableSql,
   createIndexSql,
   createTableSql,
@@ -45,9 +45,9 @@ const RDEP_SQL = `
   ORDER BY d.relative_path
 `;
 
-describe("pack slim SQL helpers", () => {
+describe("pack explorer SQL helpers", () => {
   it("derives index names and DDL from config", () => {
-    const index = SLIM_INDEX_INDEXES[0];
+    const index = EXPLORER_SCIP_INDEXES[0];
     expect(createIndexSql(index)).toBe(
       `CREATE INDEX ${indexName(index)} ON ${index.table}(${index.columns.join(", ")})`,
     );
@@ -55,7 +55,7 @@ describe("pack slim SQL helpers", () => {
 
   it("uses explicit columns in generated SQL", () => {
     const conn = new Database(INDEX_PATH, { readonly: true });
-    for (const table of SLIM_INDEX_TABLES) {
+    for (const table of EXPLORER_SCIP_TABLES) {
       const rows = conn.pragma(`table_info(${table.name})`) as { name: string }[];
       const byName = new Map(rows.map((row) => [row.name, row]));
       const specs = table.columns.map((name) => byName.get(name)!);
@@ -100,8 +100,8 @@ describe("buildExplorerDb", () => {
     ).sql;
 
     const required = new Set([
-      ...SLIM_INDEX_TABLES.map((table) => table.name),
-      ...ATLAS_TABLES.map((table) => table.name),
+      ...EXPLORER_SCIP_TABLES.map((table) => table.name),
+      ...EXPLORER_ATLAS_TABLES.map((table) => table.name),
     ]);
     for (const name of required) {
       expect(tables.has(name)).toBe(true);
@@ -143,13 +143,37 @@ describe("buildExplorerDb", () => {
 
     const atlas = new Database(ATLAS_PATH, { readonly: true });
     const packed = new Database(output, { readonly: true });
-    for (const table of ATLAS_TABLES.map((row) => row.name)) {
+    for (const table of EXPLORER_ATLAS_TABLES.map((row) => row.name)) {
       const sourceCount = (atlas.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
       const packedCount = (packed.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
       expect(packedCount).toBe(sourceCount);
     }
     atlas.close();
     packed.close();
+  });
+
+  it("writes explorer.db.gz when compress is enabled", () => {
+    const output = makeOutput()
+    const gzPath = `${output}.gz`
+    const result = buildExplorerDb(
+      { repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output },
+      { compress: true },
+    )
+
+    expect(result.outputPath).toBe(gzPath)
+    expect(fs.existsSync(gzPath)).toBe(true)
+    expect(fs.existsSync(output)).toBe(false)
+    expect(result.uncompressedBytes).toBeGreaterThan(result.outputBytes)
+
+    const packed = new Database(gunzipSync(fs.readFileSync(gzPath)), { readonly: true })
+    const tables = new Set(
+      (packed.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(
+        (row) => row.name,
+      ),
+    )
+    expect(tables.has("files")).toBe(true)
+    expect(tables.has("documents")).toBe(true)
+    packed.close()
   });
 
   it("vacuums explorer.db so a second VACUUM does not shrink it further", () => {

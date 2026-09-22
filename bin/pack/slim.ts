@@ -15,13 +15,6 @@ export type PackIndex = {
   columns: readonly string[];
 };
 
-export {
-  EXPLORER_ATLAS_INDEXES as ATLAS_INDEXES,
-  EXPLORER_ATLAS_TABLES as ATLAS_TABLES,
-  EXPLORER_SLIM_INDEXES as SLIM_INDEX_INDEXES,
-  EXPLORER_SLIM_TABLES as SLIM_INDEX_TABLES,
-} from "./schema.js"
-
 export type ColumnSpec = {
   name: string;
   type: string;

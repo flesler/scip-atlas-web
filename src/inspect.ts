@@ -1,4 +1,4 @@
-import { ATLAS_TABLES, SLIM_INDEX_TABLES } from "../bin/pack/slim.js"
+import { EXPLORER_ATLAS_TABLES, EXPLORER_SCIP_TABLES } from "../bin/pack/schema.js"
 import { formatDbCell } from "./format.js"
 
 export type InspectTable = {
@@ -25,8 +25,8 @@ export type InspectRows = {
 
 export type QueryAll = <T extends Record<string, unknown>>(sql: string, ...bind: unknown[]) => T[];
 
-const SCIP_CLI_TABLES = new Set(SLIM_INDEX_TABLES.map((table) => table.name));
-const SCIP_ATLAS_TABLES = new Set(ATLAS_TABLES.map((table) => table.name));
+const SCIP_CLI_TABLES = new Set(EXPLORER_SCIP_TABLES.map((table) => table.name))
+const SCIP_ATLAS_TABLES = new Set(EXPLORER_ATLAS_TABLES.map((table) => table.name));
 
 export type InspectTableGroup = {
   id: "scip-cli" | "scip-atlas" | "other";

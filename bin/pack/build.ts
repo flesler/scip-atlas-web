@@ -1,14 +1,12 @@
 import Database from "better-sqlite3"
 import fs from "node:fs"
 import path from "node:path"
+import { gzipSync } from "node:zlib"
 import { checkpointAtlas, finalizeExplorer, formatSummaryWarning, missingSummaryCoverages } from "./atlas.js"
-import type { ResolvedPaths } from "./paths.js"
+import { compressedOutputPath, explorerDbPath, type ResolvedPaths } from "./paths.js"
+import { EXPLORER_ATLAS_INDEXES, EXPLORER_ATLAS_TABLES, EXPLORER_SCIP_INDEXES, EXPLORER_SCIP_TABLES } from "./schema.js"
 import {
-  ATLAS_INDEXES,
-  ATLAS_TABLES,
   PackError,
-  SLIM_INDEX_INDEXES,
-  SLIM_INDEX_TABLES,
   columnSpecs,
   copyTableSql,
   createIndexSql,
@@ -20,6 +18,11 @@ export type PackResult = {
   atlasBytes: number;
   outputBytes: number;
   outputPath: string;
+  uncompressedBytes?: number
+}
+
+export type BuildExplorerOptions = {
+  compress?: boolean
 };
 
 function formatMb(bytes: number): string {
@@ -42,12 +45,15 @@ function pragmaTableInfo(conn: Database.Database, table: string) {
   }[];
 }
 
-export function buildExplorerDb(paths: ResolvedPaths): PackResult {
+export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOptions = {}): PackResult {
   const indexPath = path.resolve(paths.indexPath);
   const atlasPath = path.resolve(paths.atlasPath);
-  const outputPath = path.resolve(paths.outputPath);
+  const finalPath = path.resolve(
+    options.compress ? compressedOutputPath(paths.outputPath) : paths.outputPath,
+  )
+  const dbPath = explorerDbPath(finalPath);
 
-  if (indexPath === outputPath || atlasPath === outputPath) {
+  if (indexPath === dbPath || atlasPath === dbPath || indexPath === finalPath || atlasPath === finalPath) {
     throw new PackError("source and output must differ");
   }
 
@@ -56,11 +62,13 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
 
   checkpointAtlas(atlasPath);
 
-  if (fs.existsSync(outputPath)) {
-    fs.unlinkSync(outputPath);
+  for (const filePath of [dbPath, finalPath]) {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath)
+    }
   }
 
-  const main = new Database(outputPath);
+  const main = new Database(dbPath);
   const scip = new Database(indexPath, { readonly: true });
   const atlas = new Database(atlasPath, { readonly: true });
 
@@ -88,14 +96,14 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
 
     const pragma = (table: string) => pragmaTableInfo(scip, table);
 
-    for (const table of SLIM_INDEX_TABLES) {
+    for (const table of EXPLORER_SCIP_TABLES) {
       const specs = columnSpecs({ pragma }, table);
       main.exec(createTableSql(table, specs));
       main.exec(copyTableSql(table));
     }
 
     const atlasPragma = (table: string) => pragmaTableInfo(atlas, table)
-    for (const table of ATLAS_TABLES) {
+    for (const table of EXPLORER_ATLAS_TABLES) {
       if (!atlasTables.has(table.name)) {
         throw new PackError(`atlas missing ${table.name}; run scip-atlas sync first`)
       }
@@ -109,10 +117,10 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
       console.warn(summaryWarning)
     }
 
-    for (const index of SLIM_INDEX_INDEXES) {
+    for (const index of EXPLORER_SCIP_INDEXES) {
       main.exec(createIndexSql(index));
     }
-    for (const index of ATLAS_INDEXES) {
+    for (const index of EXPLORER_ATLAS_INDEXES) {
       main.exec(createIndexSql(index));
     }
 
@@ -125,10 +133,26 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
     main.close();
   }
 
-  const outputBytes = fs.statSync(outputPath).size;
-  console.log(
-    `index.db: ${formatMb(indexBytes)} MB + atlas.db: ${formatMb(atlasBytes)} MB -> explorer.db: ${formatMb(outputBytes)} MB`,
-  );
+  const uncompressedBytes = fs.statSync(dbPath).size
+  let outputBytes = uncompressedBytes
+  if (options.compress) {
+    fs.writeFileSync(finalPath, gzipSync(fs.readFileSync(dbPath), { level: 6 }))
+    fs.unlinkSync(dbPath)
+    outputBytes = fs.statSync(finalPath).size
+    console.log(
+      `index.db: ${formatMb(indexBytes)} MB + atlas.db: ${formatMb(atlasBytes)} MB -> ${path.basename(finalPath)}: ${formatMb(outputBytes)} MB (${formatMb(uncompressedBytes)} MB uncompressed)`,
+    );
+  } else {
+    console.log(
+      `index.db: ${formatMb(indexBytes)} MB + atlas.db: ${formatMb(atlasBytes)} MB -> ${path.basename(dbPath)}: ${formatMb(outputBytes)} MB`,
+    )
+  }
 
-  return { indexBytes, atlasBytes, outputBytes, outputPath };
+  return {
+    indexBytes,
+    atlasBytes,
+    outputBytes,
+    outputPath: options.compress ? finalPath : dbPath,
+    uncompressedBytes: options.compress ? uncompressedBytes : undefined,
+  }
 }

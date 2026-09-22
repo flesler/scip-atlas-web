@@ -41,7 +41,7 @@ app.innerHTML = `
   <header class="toolbar">
     <label class="button primary">
       Load DB
-      <input id="db-input" type="file" accept=".db" hidden />
+      <input id="db-input" type="file" accept=".db,.gz" hidden />
     </label>
     <input id="search-input" type="search" placeholder="Search names" />
     <div class="view-toggle" role="tablist" aria-label="View mode">
@@ -367,7 +367,7 @@ async function render() {
   syncExplorerLayout()
 
   if (!state.loaded) {
-    treePanel.innerHTML = `<p class="empty">Drop explorer.db here or use Load DB.</p>`;
+    treePanel.innerHTML = `<p class="empty">Drop explorer.db or explorer.db.gz here or use Load DB.</p>`;
     detailPanel.innerHTML = `<p class="empty">Load a packed explorer.db to browse the repo.</p>`;
     return;
   }

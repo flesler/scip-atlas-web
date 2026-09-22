@@ -1,13 +1,15 @@
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process"
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it } from "vitest"
 import {
+  compressedOutputPath,
   defaultIndexPath,
+  explorerDbPath,
   projectCacheSlug,
   resolveGitRoot,
-} from "../bin/pack/paths.js";
+} from "../bin/pack/paths.js"
 
 const tempDirs: string[] = [];
 
@@ -47,6 +49,13 @@ describe("project paths", () => {
     const subdir = path.join(repo, "src");
     fs.mkdirSync(subdir);
     expect(resolveGitRoot(subdir)).toBe(path.resolve(repo));
+  });
+
+  it("maps compressed explorer output paths", () => {
+    expect(compressedOutputPath("/cache/explorer.db")).toBe("/cache/explorer.db.gz")
+    expect(compressedOutputPath("/cache/explorer.db.gz")).toBe("/cache/explorer.db.gz")
+    expect(explorerDbPath("/cache/explorer.db.gz")).toBe("/cache/explorer.db")
+    expect(explorerDbPath("/cache/explorer.db")).toBe("/cache/explorer.db")
   });
 
   it("builds default index path under scip-cli cache", () => {

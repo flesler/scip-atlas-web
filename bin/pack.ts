@@ -9,6 +9,7 @@ function parseArgs(argv: string[]) {
     index?: string;
     atlas?: string;
     output?: string;
+    compress?: boolean;
   } = {};
 
   for (let i = 0; i < argv.length; i++) {
@@ -21,6 +22,8 @@ function parseArgs(argv: string[]) {
       options.atlas = argv[++i];
     } else if (arg === "--output") {
       options.output = argv[++i];
+    } else if (arg === "--compress") {
+      options.compress = true;
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -42,13 +45,15 @@ Options:
   --index PATH   Full scip-cli index.db (default: ~/.cache/scip-cli/.../index.db)
   --atlas PATH   Atlas sidecar (default: atlas.db beside index)
   --output PATH  Output explorer.db (default: explorer.db beside atlas)
+  --compress     Write gzip-compressed explorer.db.gz instead of explorer.db
 `);
 }
 
 function main() {
   try {
-    const paths = resolvePackPaths(parseArgs(process.argv.slice(2)));
-    buildExplorerDb(paths);
+    const args = parseArgs(process.argv.slice(2));
+    const paths = resolvePackPaths(args);
+    buildExplorerDb(paths, { compress: args.compress });
   } catch (error) {
     if (error instanceof PackError || error instanceof PathsError) {
       console.error(error.message);

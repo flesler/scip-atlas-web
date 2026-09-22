@@ -1,7 +1,7 @@
 import type { PackIndex, PackTable } from "./slim.js"
 
-/** SCIP slim tables + columns kept in explorer.db */
-export const EXPLORER_SLIM_TABLES: readonly PackTable[] = [
+/** SCIP tables + columns kept in explorer.db */
+export const EXPLORER_SCIP_TABLES: readonly PackTable[] = [
   { name: "documents", columns: ["id", "relative_path"] },
   { name: "global_symbols", columns: ["id", "symbol"] },
   { name: "defn_enclosing_ranges", columns: ["id", "document_id", "symbol_id", "start_line", "end_line"] },
@@ -9,7 +9,7 @@ export const EXPLORER_SLIM_TABLES: readonly PackTable[] = [
   { name: "mentions", columns: ["chunk_id", "symbol_id", "role"] },
 ]
 
-export const EXPLORER_SLIM_INDEXES: readonly PackIndex[] = [
+export const EXPLORER_SCIP_INDEXES: readonly PackIndex[] = [
   { table: "chunks", columns: ["document_id"] },
   { table: "mentions", columns: ["symbol_id"] },
   { table: "mentions", columns: ["chunk_id"] },

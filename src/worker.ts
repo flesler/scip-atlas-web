@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule, { type Database, type Sqlite3Static } from "@sqlite.org/sqlite-wasm"
+import { maybeDecompress } from "./decompress.js"
 import sqlite3Wasm from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url"
 import { listAllowedTables, listTables, tableRows, tableSchema, type QueryAll } from "./inspect.js"
 import { SQL } from "./queries.js"
@@ -70,7 +71,8 @@ function rejectFullIndex(conn: Database) {
 
 async function loadDatabase(bytes: ArrayBuffer, fileName: string) {
   const module = await getSqlite3();
-  const conn = openFromBuffer(module, new Uint8Array(bytes));
+  const raw = await maybeDecompress(bytes, fileName);
+  const conn = openFromBuffer(module, new Uint8Array(raw));
   rejectFullIndex(conn);
 
   const tables = new Set(tableNames(conn));
@@ -84,7 +86,7 @@ async function loadDatabase(bytes: ArrayBuffer, fileName: string) {
   }
 
   db = conn;
-  loadedBytes = bytes.byteLength;
+  loadedBytes = raw.byteLength;
   loadedName = fileName;
   mentionsPresent = tables.has("mentions");
   mode = resolvedMode;
