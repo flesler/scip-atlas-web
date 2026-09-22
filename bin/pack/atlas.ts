@@ -9,6 +9,10 @@ export function checkpointAtlas(atlasPath: string): void {
   }
 }
 
+export function finalizeExplorer(conn: Database.Database): void {
+  conn.exec("VACUUM")
+}
+
 export function openAtlas(atlasPath: string): Database.Database {
   const conn = new Database(atlasPath)
   conn.pragma("journal_mode = WAL")

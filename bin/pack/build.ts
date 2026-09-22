@@ -1,7 +1,7 @@
 import Database from "better-sqlite3"
 import fs from "node:fs"
 import path from "node:path"
-import { checkpointAtlas, formatSummaryWarning, missingSummaryCoverages } from "./atlas.js"
+import { checkpointAtlas, finalizeExplorer, formatSummaryWarning, missingSummaryCoverages } from "./atlas.js"
 import type { ResolvedPaths } from "./paths.js"
 import {
   ATLAS_INDEXES,
@@ -118,6 +118,7 @@ export function buildExplorerDb(paths: ResolvedPaths): PackResult {
 
     main.exec("DETACH DATABASE scip");
     main.exec("DETACH DATABASE atlas");
+    finalizeExplorer(main);
   } finally {
     scip.close();
     atlas.close();

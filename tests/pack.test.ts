@@ -152,6 +152,17 @@ describe("buildExplorerDb", () => {
     packed.close();
   });
 
+  it("vacuums explorer.db so a second VACUUM does not shrink it further", () => {
+    const output = makeOutput()
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
+
+    const before = fs.statSync(output).size
+    const conn = new Database(output)
+    conn.exec("VACUUM")
+    conn.close()
+    expect(fs.statSync(output).size).toBe(before)
+  });
+
   it("rejects missing source index", () => {
     const output = makeOutput();
     expect(() =>
