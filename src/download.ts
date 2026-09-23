@@ -1,5 +1,4 @@
 const DOWNLOAD_NAME = "scip-atlas-web.html";
-const FILE_DOWNLOAD_SOURCE = "__DOWNLOAD_SOURCE__";
 
 function saveBlob(blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -10,17 +9,19 @@ function saveBlob(blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-export async function downloadApp() {
-  if (location.protocol === "http:" || location.protocol === "https:") {
-    const response = await fetch(location.href);
-    const blob = await response.blob();
-    saveBlob(blob);
-    return;
+export function canDownloadApp(isProd = import.meta.env.PROD, protocol?: string): boolean {
+  if (!isProd) {
+    return false
   }
+  const resolved = protocol ?? location.protocol
+  return resolved === "http:" || resolved === "https:"
+}
 
-  if (!FILE_DOWNLOAD_SOURCE || FILE_DOWNLOAD_SOURCE === "__DOWNLOAD_SOURCE__") {
-    throw new Error("download source is not embedded for file://");
+export async function downloadApp() {
+  if (!canDownloadApp()) {
+    throw new Error("download is only available on http(s) pages")
   }
-  const html = JSON.parse(FILE_DOWNLOAD_SOURCE) as string;
-  saveBlob(new Blob([html], { type: "text/html" }));
+  const response = await fetch(location.href)
+  const blob = await response.blob()
+  saveBlob(blob)
 }

@@ -7,7 +7,7 @@ import {
   loadDatabase,
   searchDatabase,
 } from "./db-client.js"
-import { downloadApp } from "./download.js"
+import { canDownloadApp, downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
 import { groupInspectTables } from "./inspect.js"
 import "./styles.css"
@@ -98,6 +98,7 @@ const treePanel = app.querySelector<HTMLDivElement>("#tree-panel")!;
 const detailPanel = app.querySelector<HTMLDivElement>("#detail-panel")!;
 const viewExplorerBtn = app.querySelector<HTMLButtonElement>("#view-explorer")!
 const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!
+const downloadBtn = app.querySelector<HTMLButtonElement>("#download-btn")!
 const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
 const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
 
@@ -519,12 +520,17 @@ function setViewMode(mode: ViewMode) {
   searchInput.disabled = !state.loaded || mode === "db"
 }
 
+function syncDownloadButton() {
+  downloadBtn.hidden = !canDownloadApp()
+}
+
 function syncLoadChrome() {
   loadScreen.hidden = state.loaded
   layoutEl.classList.toggle("layout--awaiting-db", !state.loaded)
   searchInput.disabled = !state.loaded || state.viewMode === "db"
   viewExplorerBtn.disabled = !state.loaded
   viewDbBtn.disabled = !state.loaded
+  syncDownloadButton()
 }
 
 async function selectTable(table: string, offset = 0) {
@@ -668,7 +674,9 @@ viewDbBtn.addEventListener("click", () => {
   void render()
 });
 
-app.querySelector("#download-btn")!.addEventListener("click", () => {
+syncDownloadButton()
+
+downloadBtn.addEventListener("click", () => {
   void downloadApp().catch((error) => setError(error instanceof Error ? error.message : String(error)));
 });
 
