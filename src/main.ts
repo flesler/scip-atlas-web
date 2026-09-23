@@ -43,7 +43,7 @@ app.innerHTML = `
       id="search-input"
       type="search"
       placeholder="Search names"
-      title="Find files and folders by name prefix. Enter opens the first match; Esc restores the tree."
+      title="Find files and folders by name prefix. Type anywhere to search; Enter opens the first match; Esc restores the tree."
       disabled
     />
     <div class="view-toggle" role="tablist" aria-label="View mode">
@@ -101,6 +101,28 @@ const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!
 const downloadBtn = app.querySelector<HTMLButtonElement>("#download-btn")!
 const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
 const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+  if (target.isContentEditable) {
+    return true
+  }
+  const tag = target.tagName
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT"
+}
+
+function focusSearchWithKey(key: string) {
+  searchInput.focus()
+  const start = searchInput.selectionStart ?? searchInput.value.length
+  const end = searchInput.selectionEnd ?? searchInput.value.length
+  searchInput.value = `${searchInput.value.slice(0, start)}${key}${searchInput.value.slice(end)}`
+  const cursor = start + key.length
+  searchInput.selectionStart = cursor
+  searchInput.selectionEnd = cursor
+  searchInput.dispatchEvent(new Event("input", { bubbles: true }))
+}
 
 function basename(path: string): string {
   const parts = path.split("/");
@@ -637,6 +659,23 @@ searchInput.addEventListener("input", () => {
     return
   }
   scheduleSearch(query)
+})
+
+document.addEventListener("keydown", (event) => {
+  if (!state.loaded || state.viewMode !== "explorer" || searchInput.disabled) {
+    return
+  }
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return
+  }
+  if (isEditableTarget(event.target)) {
+    return
+  }
+  if (event.key.length !== 1 || !/^[a-zA-Z]$/.test(event.key)) {
+    return
+  }
+  event.preventDefault()
+  focusSearchWithKey(event.key)
 })
 
 searchInput.addEventListener("keydown", (event) => {
