@@ -35,13 +35,13 @@ export const SQL = {
     WHERE f.relative_path = ?
   `,
   definedSymbols: `
-    SELECT gs.symbol, der.start_line, der.end_line
+    SELECT gs.display_name, der.start_line, der.end_line
     FROM global_symbols gs
     JOIN defn_enclosing_ranges der ON der.symbol_id = gs.id
     JOIN documents d ON der.document_id = d.id
     WHERE d.relative_path = ?
-      AND gs.symbol NOT LIKE '%/'
-    ORDER BY der.start_line, gs.symbol
+      AND gs.display_name IS NOT NULL
+    ORDER BY der.start_line, gs.display_name
   `,
   deps: `
     SELECT DISTINCT def_d.relative_path

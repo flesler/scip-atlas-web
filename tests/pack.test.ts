@@ -64,8 +64,10 @@ describe("pack explorer SQL helpers", () => {
       for (const column of table.columns) {
         expect(ddl).toContain(column);
       }
-      const insert = copyTableSql(table);
-      expect(insert).toContain(`SELECT ${table.columns.join(", ")}`);
+      if (table.name !== "global_symbols") {
+        const insert = copyTableSql(table)
+        expect(insert).toContain(`SELECT ${table.columns.join(", ")}`)
+      }
     }
     conn.close();
   });
@@ -114,7 +116,8 @@ describe("buildExplorerDb", () => {
     const symbolCols = new Set(
       (conn.pragma("table_info(global_symbols)") as { name: string }[]).map((row) => row.name),
     )
-    expect(symbolCols.has("display_name")).toBe(false)
+    expect(symbolCols.has("display_name")).toBe(true)
+    expect(symbolCols.has("symbol")).toBe(false)
     expect(symbolCols.has("kind")).toBe(false)
     const fileCols = new Set((conn.pragma("table_info(files)") as { name: string }[]).map((row) => row.name))
     expect(fileCols.has("folder")).toBe(false)
@@ -123,6 +126,29 @@ describe("buildExplorerDb", () => {
     expect(mentionPk).toContain("PRIMARY KEY (chunk_id, symbol_id, role)");
     conn.close();
   });
+
+  it("stores parsed display_name and drops symbol from global_symbols", () => {
+    const output = makeOutput()
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
+
+    const packed = new Database(output, { readonly: true })
+    const names = packed
+      .prepare(
+        `SELECT gs.display_name
+         FROM global_symbols gs
+         JOIN defn_enclosing_ranges der ON der.symbol_id = gs.id
+         JOIN documents d ON der.document_id = d.id
+         WHERE d.relative_path = 'src/helper.ts' AND gs.display_name IS NOT NULL
+         ORDER BY der.start_line, gs.display_name`,
+      )
+      .all()
+      .map((row) => (row as { display_name: string }).display_name)
+
+    packed.close()
+
+    expect(names).toContain("greet")
+    expect(names.every((name) => !name.includes("scip-typescript"))).toBe(true)
+  })
 
   it("matches rdeps against full index for fixture file", () => {
     const output = makeOutput();

@@ -3,7 +3,7 @@ import type { PackIndex, PackTable } from "./slim.js"
 /** SCIP tables + columns kept in explorer.db */
 export const EXPLORER_SCIP_TABLES: readonly PackTable[] = [
   { name: "documents", columns: ["id", "relative_path"] },
-  { name: "global_symbols", columns: ["id", "symbol"] },
+  { name: "global_symbols", columns: ["id", "display_name"] },
   { name: "defn_enclosing_ranges", columns: ["id", "document_id", "symbol_id", "start_line", "end_line"] },
   { name: "chunks", columns: ["id", "document_id", "start_line", "end_line"] },
   { name: "mentions", columns: ["chunk_id", "symbol_id", "role"] },

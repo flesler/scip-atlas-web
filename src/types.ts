@@ -6,7 +6,6 @@ export type TreeNode = {
 
 export type SymbolRow = {
   display_name: string;
-  symbol: string;
   start_line: number;
   end_line: number;
 };

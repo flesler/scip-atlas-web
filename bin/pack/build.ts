@@ -12,6 +12,7 @@ import {
   createIndexSql,
   createTableSql,
 } from "./slim.js"
+import { copyGlobalSymbols } from "./symbols.js"
 
 export type PackResult = {
   indexBytes: number;
@@ -99,7 +100,11 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
     for (const table of EXPLORER_SCIP_TABLES) {
       const specs = columnSpecs({ pragma }, table);
       main.exec(createTableSql(table, specs));
-      main.exec(copyTableSql(table));
+      if (table.name === "global_symbols") {
+        copyGlobalSymbols(main, scip);
+      } else {
+        main.exec(copyTableSql(table));
+      }
     }
 
     const atlasPragma = (table: string) => pragmaTableInfo(atlas, table)

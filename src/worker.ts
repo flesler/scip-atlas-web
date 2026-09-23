@@ -1,10 +1,9 @@
 /// <reference lib="webworker" />
 import sqlite3InitModule, { type Database, type Sqlite3Static } from "@sqlite.org/sqlite-wasm"
-import { maybeDecompress } from "./decompress.js"
 import sqlite3Wasm from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url"
+import { maybeDecompress } from "./decompress.js"
 import { listAllowedTables, listTables, tableRows, tableSchema, type QueryAll } from "./inspect.js"
 import { SQL } from "./queries.js"
-import { symbolDisplayName } from "./symbols.js"
 import { listTree } from "./tree.js"
 import type { HealthInfo, PathDetails, SearchHit, SymbolRow, WorkerRequest, WorkerResponse } from "./types.js"
 
@@ -121,19 +120,7 @@ function node(pathValue: string): PathDetails {
     summary: fileOverlay.summary,
   }
 
-  const symbols = queryAll<{
-    symbol: string
-    start_line: number
-    end_line: number
-  }>(db, SQL.definedSymbols, pathValue)
-    .map((row) => {
-      const display_name = symbolDisplayName(row.symbol, null)
-      if (!display_name) {
-        return null
-      }
-      return { ...row, display_name }
-    })
-    .filter((row): row is SymbolRow => row !== null)
+  const symbols = queryAll<SymbolRow>(db, SQL.definedSymbols, pathValue)
 
   if (!mentionsPresent) {
     throw new Error("mentions table missing; run pack / rebuild");
