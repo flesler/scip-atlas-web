@@ -10,6 +10,7 @@ import {
 import { canDownloadApp, downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
 import { flattenInspectTableNames, groupInspectTables } from "./inspect.js"
+import { mountShortcutsInline, mountShortcutsOverlay, setShortcutsOverlayOpen } from "./shortcuts-panel.js"
 import "./styles.css"
 import { createTreeIcon } from "./tree-icons.js"
 import { ROOT_TREE_KEY, treeCacheKey } from "./tree.js"
@@ -36,6 +37,7 @@ const state = {
   inspectTables: [] as Awaited<ReturnType<typeof fetchInspectTables>>,
   treeCache: new Map<string, TreeNode[]>(),
   error: "",
+  shortcutsOpen: false,
 };
 
 initDbClient(new DbWorker());
@@ -45,8 +47,8 @@ app.innerHTML = `
     <input
       id="search-input"
       type="search"
-      placeholder="Search names"
-      title="Find files and folders by name prefix. Type anywhere to search; Enter opens the first match; Esc restores the tree."
+      placeholder="Type to search files by name or symbols..."
+      title="Find files and folders by name or defined symbol prefix. Type anywhere to search; Enter opens the first match; Esc restores the tree."
       disabled
     />
     <div class="view-toggle" role="tablist" aria-label="View mode">
@@ -104,6 +106,49 @@ const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!
 const downloadBtn = app.querySelector<HTMLButtonElement>("#download-btn")!
 const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
 const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
+const shortcutsInline = mountShortcutsInline(loadScreen)
+const shortcutsOverlay = mountShortcutsOverlay(app, () => {
+  state.shortcutsOpen = false
+  syncShortcutsPanel()
+})
+
+function syncShortcutsPanel() {
+  shortcutsInline.hidden = state.loaded
+  if (!state.loaded) {
+    shortcutsOverlay.hidden = true
+    return
+  }
+  setShortcutsOverlayOpen(shortcutsOverlay, state.shortcutsOpen)
+}
+
+function toggleShortcutsPanel() {
+  state.shortcutsOpen = !state.shortcutsOpen
+  syncShortcutsPanel()
+}
+
+function closeShortcutsPanel() {
+  if (!state.shortcutsOpen) {
+    return false
+  }
+  state.shortcutsOpen = false
+  syncShortcutsPanel()
+  return true
+}
+
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.key !== "Escape") {
+      return
+    }
+    if (!closeShortcutsPanel()) {
+      return
+    }
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  },
+  true,
+)
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -228,6 +273,7 @@ function syncExplorerLayout() {
     "layout--tree-only",
     state.viewMode === "explorer" && (!state.detailPath || state.searchActive),
   )
+  layoutEl.classList.toggle("layout--db", state.viewMode === "db")
 }
 
 function hideDetailPanel() {
@@ -680,6 +726,7 @@ function setViewMode(mode: ViewMode) {
   viewExplorerBtn.setAttribute("aria-selected", mode === "explorer" ? "true" : "false")
   viewDbBtn.setAttribute("aria-selected", mode === "db" ? "true" : "false")
   searchInput.disabled = !state.loaded || mode === "db"
+  syncExplorerLayout()
 }
 
 function syncDownloadButton() {
@@ -693,6 +740,7 @@ function syncLoadChrome() {
   viewExplorerBtn.disabled = !state.loaded
   viewDbBtn.disabled = !state.loaded
   syncDownloadButton()
+  syncShortcutsPanel()
 }
 
 async function selectTable(table: string, offset = 0) {
@@ -847,6 +895,7 @@ async function handleFile(file: File) {
   state.selectedTable = null
   state.tableOffset = 0;
   state.error = "";
+  state.shortcutsOpen = false
   syncLoadChrome()
   await runInitialTreeExpand()
   if (!state.detailPath) {
@@ -872,6 +921,33 @@ searchInput.addEventListener("input", () => {
 })
 
 document.addEventListener("keydown", (event) => {
+  if (
+    state.loaded &&
+    !searchInput.disabled &&
+    event.key === "f" &&
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    !event.shiftKey
+  ) {
+    event.preventDefault()
+    searchInput.focus()
+    searchInput.select()
+    return
+  }
+  if (
+    state.loaded &&
+    event.key === "?" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey
+  ) {
+    if (isEditableTarget(event.target) && event.target !== searchInput) {
+      return
+    }
+    event.preventDefault()
+    toggleShortcutsPanel()
+    return
+  }
   if (!state.loaded) {
     return
   }
@@ -895,6 +971,9 @@ document.addEventListener("keydown", (event) => {
     event.key === "ArrowRight"
   ) {
     const fromSearch = event.target === searchInput
+    if (fromSearch && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      return
+    }
     if (fromSearch || !isEditableTarget(event.target)) {
       event.preventDefault()
       blurSearchForTreeKeys()
@@ -996,7 +1075,8 @@ document.body.addEventListener("drop", (event) => {
 void fetchHealth()
   .then((health) => {
     if (health.loaded) {
-      state.loaded = true;
+      state.loaded = true
+      state.shortcutsOpen = false
     }
   })
   .catch(() => {})

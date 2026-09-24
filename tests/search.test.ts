@@ -32,12 +32,22 @@ afterEach(() => {
 describe("search SQL", () => {
   it("matches file and dir basenames by prefix on name", () => {
     const db = openExplorer()
-    const hits = db.prepare(SQL.search).all("helper", "helper") as { path: string; name: string; kind: string }[]
+    const hits = db.prepare(SQL.search).all("helper", "helper", "helper") as { path: string; name: string; kind: string }[]
 
     db.close()
 
     expect(hits.length).toBeGreaterThan(0)
     expect(hits.every((hit) => hit.name.startsWith("helper"))).toBe(true)
     expect(hits.some((hit) => hit.kind === "file")).toBe(true)
+  })
+
+  it("matches files by defined symbol display_name prefix", () => {
+    const db = openExplorer()
+    const hits = db.prepare(SQL.search).all("greet", "greet", "greet") as { path: string; name: string; kind: string }[]
+
+    db.close()
+
+    expect(hits.some((hit) => hit.path === "src/helper.ts")).toBe(true)
+    expect(hits.every((hit) => hit.name !== "greet" || hit.path === "src/helper.ts")).toBe(true)
   })
 })

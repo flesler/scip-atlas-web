@@ -5,7 +5,9 @@ description: Read when changing explorer or DB view keyboard navigation.
 
 # Keyboard
 
-Owner: `src/main.ts` (`document` keydown + `searchInput` keydown). `PAGE_STEPS = 5`.
+Owner: `src/main.ts` (`document` keydown + `searchInput` keydown), `src/shortcuts-panel.ts`. `PAGE_STEPS = 5`.
+
+**Shortcuts panel:** user-facing curated list in `SHORTCUT_SECTIONS` — only non-obvious keys; inline below upload until DB loads; after load `?` toggles overlay. Agent docs below are the full behavior reference.
 
 ## Explorer
 
@@ -17,10 +19,12 @@ Owner: `src/main.ts` (`document` keydown + `searchInput` keydown). `PAGE_STEPS =
 | → | Expand dir (or first child if already expanded); files: no-op |
 | Esc | Close file detail panel (search input: restore tree via its own handler) |
 | a–z | Type-to-search (focuses search, clears tree selection) |
+| Ctrl/Cmd+F | Focus search (overrides browser find) |
+| ? | Toggle shortcuts panel |
 
 **Boundaries (↑/↓):** at first sibling → parent; past last sibling → `→` (expand / first child).
 
-**Search:** ↑/↓/Page keys move hits without opening detail. ←/→ disabled while search results are active. Enter opens first hit. Esc in search restores prior tree state.
+**Search:** ↑/↓/Page keys move hits without opening detail. ←/→ in the search box edit text; ←/→ elsewhere follow tree rules (disabled while search results are active). Enter opens first hit. Esc in search restores prior tree state.
 
 **Focus model:** `focusEntry` is the single source of truth — updates selection, expands ancestors, renders, scrolls row. `syncPanelForEntry`: **file** → open right panel; **dir** → hide panel. Do not toggle the panel from individual key handlers.
 

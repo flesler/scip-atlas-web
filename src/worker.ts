@@ -156,7 +156,7 @@ function search(query: string): SearchHit[] {
   if (!term) {
     return [];
   }
-  return queryAll<SearchHit>(db, SQL.search, term, term)
+  return queryAll<SearchHit>(db, SQL.search, term, term, term)
 }
 
 function health(): HealthInfo {
