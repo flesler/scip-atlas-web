@@ -9,7 +9,7 @@ import {
 } from "./db-client.js"
 import { canDownloadApp, downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
-import { groupInspectTables } from "./inspect.js"
+import { flattenInspectTableNames, groupInspectTables } from "./inspect.js"
 import "./styles.css"
 import { createTreeIcon } from "./tree-icons.js"
 import { ROOT_TREE_KEY, treeCacheKey } from "./tree.js"
@@ -32,6 +32,7 @@ const state = {
   searchRestore: null as { expanded: string[]; selectedPath: string; detailPath: string | null } | null,
   selectedTable: null as string | null,
   tableOffset: 0,
+  tablePageInfo: null as { rowCount: number; limit: number } | null,
   inspectTables: [] as Awaited<ReturnType<typeof fetchInspectTables>>,
   treeCache: new Map<string, TreeNode[]>(),
   error: "",
@@ -701,6 +702,70 @@ async function selectTable(table: string, offset = 0) {
   await render()
 }
 
+function scrollSelectedDbTableIntoView() {
+  requestAnimationFrame(() => {
+    treePanel.querySelector<HTMLButtonElement>(".db-table-row.selected")?.scrollIntoView({ block: "nearest" })
+  })
+}
+
+async function moveDbTable(delta: number) {
+  if (!state.inspectTables.length) {
+    state.inspectTables = await fetchInspectTables()
+  }
+  const names = flattenInspectTableNames(groupInspectTables(state.inspectTables))
+  if (!names.length) {
+    return
+  }
+  const index = state.selectedTable ? names.indexOf(state.selectedTable) : -1
+  const current = index >= 0 ? index : 0
+  const next = current + delta
+  if (next < 0 || next >= names.length) {
+    return
+  }
+  await selectTable(names[next], 0)
+  scrollSelectedDbTableIntoView()
+}
+
+async function moveDbPage(delta: number) {
+  if (!state.selectedTable || !state.tablePageInfo) {
+    return
+  }
+  const { rowCount, limit } = state.tablePageInfo
+  const nextOffset = state.tableOffset + delta * limit
+  if (nextOffset < 0 || nextOffset >= rowCount) {
+    return
+  }
+  await selectTable(state.selectedTable, nextOffset)
+}
+
+function handleDbKeydown(event: KeyboardEvent) {
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return
+  }
+  if (
+    event.key !== "ArrowUp" &&
+    event.key !== "ArrowDown" &&
+    event.key !== "ArrowLeft" &&
+    event.key !== "ArrowRight"
+  ) {
+    return
+  }
+  event.preventDefault()
+  if (event.key === "ArrowUp") {
+    void moveDbTable(-1)
+    return
+  }
+  if (event.key === "ArrowDown") {
+    void moveDbTable(1)
+    return
+  }
+  if (event.key === "ArrowLeft") {
+    void moveDbPage(-1)
+    return
+  }
+  void moveDbPage(1)
+}
+
 async function render() {
   syncLoadChrome()
   syncExplorerLayout()
@@ -724,11 +789,14 @@ async function render() {
     renderDbTableList(treePanel, tableGroups, state.selectedTable, (table) => {
       void selectTable(table, 0)
     })
+    scrollSelectedDbTableIntoView()
     if (state.selectedTable) {
-      await renderDbDetails(detailPanel, state.selectedTable, state.tableOffset, (nextOffset) => {
+      const data = await renderDbDetails(detailPanel, state.selectedTable, state.tableOffset, (nextOffset) => {
         void selectTable(state.selectedTable!, nextOffset)
       })
+      state.tablePageInfo = { rowCount: data.rowCount, limit: data.limit }
     } else {
+      state.tablePageInfo = null
       detailPanel.innerHTML = `<p class="empty">No tables found.</p>`
     }
     return
@@ -804,7 +872,14 @@ searchInput.addEventListener("input", () => {
 })
 
 document.addEventListener("keydown", (event) => {
-  if (!state.loaded || state.viewMode !== "explorer" || searchInput.disabled) {
+  if (!state.loaded) {
+    return
+  }
+  if (state.viewMode === "db") {
+    handleDbKeydown(event)
+    return
+  }
+  if (state.viewMode !== "explorer" || searchInput.disabled) {
     return
   }
   if (event.ctrlKey || event.metaKey || event.altKey) {

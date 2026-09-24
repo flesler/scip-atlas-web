@@ -47,8 +47,7 @@ export const SQL = {
     SELECT DISTINCT def_d.relative_path
     FROM mentions m
     JOIN chunks c ON m.chunk_id = c.id
-    JOIN global_symbols gs ON m.symbol_id = gs.id
-    JOIN defn_enclosing_ranges der ON der.symbol_id = gs.id
+    JOIN defn_enclosing_ranges der ON der.symbol_id = m.symbol_id
     JOIN documents def_d ON der.document_id = def_d.id
     WHERE c.document_id = (SELECT id FROM documents WHERE relative_path = ?)
       AND m.role != 1

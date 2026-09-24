@@ -5,7 +5,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
 import { buildExplorerDb } from "../bin/pack/build.js"
-import { groupInspectTables, listTables, tableRows, tableSchema, type QueryAll } from "../src/inspect.js"
+import {
+  flattenInspectTableNames,
+  groupInspectTables,
+  listTables,
+  tableRows,
+  tableSchema,
+  type QueryAll,
+} from "../src/inspect.js"
 
 const FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const tempDirs: string[] = [];
@@ -56,6 +63,19 @@ describe("inspect", () => {
     );
     expect(byId.has("other")).toBe(false);
   });
+
+  it("flattens grouped table names in display order", () => {
+    const groups = groupInspectTables([
+      { name: "chunks", type: "table", rowCount: 1 },
+      { name: "files", type: "table", rowCount: 2 },
+      { name: "dirs", type: "table", rowCount: 3 },
+    ])
+    expect(flattenInspectTableNames(groups)).toEqual([
+      "chunks",
+      "files",
+      "dirs",
+    ])
+  })
 
   it("returns schema and rows with NULL rendered explicitly", () => {
     const db = openExplorer();

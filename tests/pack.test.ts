@@ -15,6 +15,7 @@ import {
   createTableSql,
   indexName
 } from "../bin/pack/slim.js"
+import { planGlobalSymbolPack } from "../bin/pack/symbols.js"
 
 const FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const INDEX_PATH = path.join(FIXTURE_DIR, "index.db");
@@ -43,6 +44,18 @@ const RDEP_SQL = `
   JOIN documents def_d ON der.document_id = def_d.id
   WHERE m.role != 1 AND def_d.relative_path = ? AND d.relative_path != ?
   ORDER BY d.relative_path
+`;
+
+const DEPS_SQL = `
+  SELECT DISTINCT def_d.relative_path
+  FROM mentions m
+  JOIN chunks c ON m.chunk_id = c.id
+  JOIN defn_enclosing_ranges der ON der.symbol_id = m.symbol_id
+  JOIN documents def_d ON der.document_id = def_d.id
+  WHERE c.document_id = (SELECT id FROM documents WHERE relative_path = ?)
+    AND m.role != 1
+    AND def_d.relative_path != ?
+  ORDER BY def_d.relative_path
 `;
 
 describe("pack explorer SQL helpers", () => {
@@ -127,6 +140,27 @@ describe("buildExplorerDb", () => {
     conn.close();
   });
 
+  it("skips global_symbols rows with no display_name", () => {
+    const output = makeOutput()
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
+
+    const source = new Database(INDEX_PATH, { readonly: true })
+    const packed = new Database(output, { readonly: true })
+    const expectedPacked = planGlobalSymbolPack(source).length
+    const packedCount = (packed.prepare("SELECT COUNT(*) AS n FROM global_symbols").get() as { n: number }).n
+    const nullInPacked = (
+      packed.prepare("SELECT COUNT(*) AS n FROM global_symbols WHERE display_name IS NULL").get() as { n: number }
+    ).n
+    const sourceCount = (source.prepare("SELECT COUNT(*) AS n FROM global_symbols").get() as { n: number }).n
+
+    source.close()
+    packed.close()
+
+    expect(sourceCount - expectedPacked).toBeGreaterThan(0)
+    expect(packedCount).toBe(expectedPacked)
+    expect(nullInPacked).toBe(0)
+  })
+
   it("stores parsed display_name and drops symbol from global_symbols", () => {
     const output = makeOutput()
     buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
@@ -149,6 +183,20 @@ describe("buildExplorerDb", () => {
     expect(names).toContain("greet")
     expect(names.every((name) => !name.includes("scip-typescript"))).toBe(true)
   })
+
+  it("matches deps against full index for fixture file", () => {
+    const output = makeOutput()
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
+
+    const filePath = "src/helper.ts"
+    const full = new Database(INDEX_PATH, { readonly: true })
+    const packed = new Database(output, { readonly: true })
+    const fullRows = full.prepare(DEPS_SQL).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path)
+    const packedRows = packed.prepare(DEPS_SQL).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path)
+    full.close()
+    packed.close()
+    expect(packedRows).toEqual(fullRows)
+  });
 
   it("matches rdeps against full index for fixture file", () => {
     const output = makeOutput();

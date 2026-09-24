@@ -34,6 +34,16 @@ export type InspectTableGroup = {
   tables: InspectTable[];
 };
 
+export function flattenInspectTableNames(groups: InspectTableGroup[]): string[] {
+  const names: string[] = []
+  for (const group of groups) {
+    for (const table of group.tables) {
+      names.push(table.name)
+    }
+  }
+  return names
+}
+
 export function groupInspectTables(tables: InspectTable[]): InspectTableGroup[] {
   const byName = new Map(tables.map((table) => [table.name, table]));
   const groups: InspectTableGroup[] = [

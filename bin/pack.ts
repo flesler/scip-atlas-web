@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { buildExplorerDb } from "./pack/build.js";
-import { PackError } from "./pack/slim.js";
-import { PathsError, resolvePackPaths } from "./pack/paths.js";
+import { buildExplorerDb } from "./pack/build.js"
+import { PathsError, resolvePackPaths } from "./pack/paths.js"
+import { PackError } from "./pack/slim.js"
 
 function parseArgs(argv: string[]) {
   const options: {

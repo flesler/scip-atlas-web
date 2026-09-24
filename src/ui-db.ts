@@ -2,6 +2,8 @@ import { fetchInspectRows, fetchInspectSchema } from "./db-client.js"
 import type { InspectTableGroup } from "./inspect.js"
 import type { InspectRows } from "./types.js"
 
+export const DB_TABLE_PAGE_SIZE = 100
+
 export function renderDbTableList(
   container: HTMLElement,
   groups: InspectTableGroup[],
@@ -46,8 +48,11 @@ export async function renderDbDetails(
   table: string,
   offset: number,
   onPage: (nextOffset: number) => void,
-) {
-  const [schema, data] = await Promise.all([fetchInspectSchema(table), fetchInspectRows(table, offset, 100)]);
+): Promise<InspectRows> {
+  const [schema, data] = await Promise.all([
+    fetchInspectSchema(table),
+    fetchInspectRows(table, offset, DB_TABLE_PAGE_SIZE),
+  ]);
 
   container.innerHTML = "";
   const title = document.createElement("h2");
@@ -71,6 +76,7 @@ export async function renderDbDetails(
   container.appendChild(schemaSection);
 
   appendRowsSection(container, data, onPage);
+  return data
 }
 
 function appendRowsSection(container: HTMLElement, data: InspectRows, onPage: (nextOffset: number) => void) {
