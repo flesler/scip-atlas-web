@@ -512,6 +512,48 @@ body {
   cursor: pointer;
 }
 
+.shortcuts-fab {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 101;
+  padding: 0;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.08);
+}
+
+.shortcuts-fab::before {
+  content: "";
+  position: absolute;
+  inset: -0.4rem;
+}
+
+.shortcuts-fab:hover,
+.shortcuts-fab--active {
+  opacity: 1;
+  color: var(--text);
+}
+
+.shortcuts-fab--pinned {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.shortcuts-fab[hidden] {
+  display: none;
+}
+
 .shortcuts-inline {
   width: min(36rem, 100%);
   margin-top: 0.5rem;
@@ -545,6 +587,10 @@ body {
 
 .shortcuts-overlay[hidden] {
   display: none;
+}
+
+.shortcuts-overlay--preview {
+  pointer-events: none;
 }
 
 .shortcuts-dialog {

@@ -82,6 +82,28 @@ export function mountShortcutsInline(parent: HTMLElement): HTMLDivElement {
   return inline
 }
 
+export function mountShortcutsFab(
+  root: HTMLElement,
+  handlers: {
+    onClick: () => void
+    onMouseEnter: () => void
+    onMouseLeave: () => void
+  },
+): HTMLButtonElement {
+  const fab = document.createElement("button")
+  fab.type = "button"
+  fab.className = "shortcuts-fab"
+  fab.setAttribute("aria-label", "Keyboard shortcuts")
+  fab.setAttribute("aria-expanded", "false")
+  fab.title = "Keyboard shortcuts (?). Click to pin; hover to preview."
+  fab.textContent = "?"
+  fab.addEventListener("click", handlers.onClick)
+  fab.addEventListener("mouseenter", handlers.onMouseEnter)
+  fab.addEventListener("mouseleave", handlers.onMouseLeave)
+  root.appendChild(fab)
+  return fab
+}
+
 export function mountShortcutsOverlay(root: HTMLElement, onClose: () => void): HTMLDivElement {
   const overlay = document.createElement("div")
   overlay.className = "shortcuts-overlay"

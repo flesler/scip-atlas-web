@@ -10,7 +10,12 @@ import {
 import { canDownloadApp, downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
 import { flattenInspectTableNames, groupInspectTables } from "./inspect.js"
-import { mountShortcutsInline, mountShortcutsOverlay, setShortcutsOverlayOpen } from "./shortcuts-panel.js"
+import {
+  mountShortcutsFab,
+  mountShortcutsInline,
+  mountShortcutsOverlay,
+  setShortcutsOverlayOpen,
+} from "./shortcuts-panel.js"
 import "./styles.css"
 import { createTreeIcon } from "./tree-icons.js"
 import { ROOT_TREE_KEY, treeCacheKey } from "./tree.js"
@@ -39,6 +44,7 @@ const state = {
   treeCache: new Map<string, TreeNode[]>(),
   error: "",
   shortcutsOpen: false,
+  shortcutsHover: false,
 };
 
 initDbClient(new DbWorker());
@@ -119,29 +125,60 @@ const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
 const githubLink = app.querySelector<HTMLAnchorElement>("#github-link")!
 const shortcutsInline = mountShortcutsInline(loadScreen)
 const shortcutsOverlay = mountShortcutsOverlay(app, () => {
-  state.shortcutsOpen = false
-  syncShortcutsPanel()
+  closeShortcutsPanel()
+})
+const shortcutsFab = mountShortcutsFab(app, {
+  onClick: () => {
+    state.shortcutsOpen = !state.shortcutsOpen
+    if (!state.shortcutsOpen) {
+      state.shortcutsHover = false
+    }
+    syncShortcutsPanel()
+  },
+  onMouseEnter: () => {
+    if (state.shortcutsOpen) {
+      return
+    }
+    state.shortcutsHover = true
+    syncShortcutsPanel()
+  },
+  onMouseLeave: () => {
+    if (state.shortcutsOpen) {
+      return
+    }
+    state.shortcutsHover = false
+    syncShortcutsPanel()
+  },
 })
 
 function syncShortcutsPanel() {
-  shortcutsInline.hidden = state.loaded
-  if (!state.loaded) {
-    shortcutsOverlay.hidden = true
-    return
-  }
-  setShortcutsOverlayOpen(shortcutsOverlay, state.shortcutsOpen)
+  shortcutsFab.hidden = !state.loaded
+  const overlayOpen = state.loaded && (state.shortcutsOpen || state.shortcutsHover)
+  shortcutsInline.hidden = state.loaded || overlayOpen
+  setShortcutsOverlayOpen(shortcutsOverlay, overlayOpen)
+  shortcutsOverlay.classList.toggle(
+    "shortcuts-overlay--preview",
+    state.shortcutsHover && !state.shortcutsOpen,
+  )
+  shortcutsFab.setAttribute("aria-expanded", overlayOpen ? "true" : "false")
+  shortcutsFab.classList.toggle("shortcuts-fab--pinned", state.shortcutsOpen)
+  shortcutsFab.classList.toggle("shortcuts-fab--active", overlayOpen)
 }
 
 function toggleShortcutsPanel() {
   state.shortcutsOpen = !state.shortcutsOpen
+  if (!state.shortcutsOpen) {
+    state.shortcutsHover = false
+  }
   syncShortcutsPanel()
 }
 
 function closeShortcutsPanel() {
-  if (!state.shortcutsOpen) {
+  if (!state.shortcutsOpen && !state.shortcutsHover) {
     return false
   }
   state.shortcutsOpen = false
+  state.shortcutsHover = false
   syncShortcutsPanel()
   return true
 }
@@ -747,6 +784,10 @@ function syncDownloadButton() {
 function syncLoadChrome() {
   loadScreen.hidden = state.loaded
   githubLink.hidden = state.loaded
+  if (!state.loaded) {
+    state.shortcutsOpen = false
+    state.shortcutsHover = false
+  }
   layoutEl.classList.toggle("layout--awaiting-db", !state.loaded)
   searchInput.disabled = !state.loaded || state.viewMode === "db"
   viewExplorerBtn.disabled = !state.loaded
@@ -908,6 +949,7 @@ async function handleFile(file: File) {
   state.tableOffset = 0;
   state.error = "";
   state.shortcutsOpen = false
+  state.shortcutsHover = false
   syncLoadChrome()
   await runInitialTreeExpand()
   if (!state.detailPath) {
@@ -1089,6 +1131,7 @@ void fetchHealth()
     if (health.loaded) {
       state.loaded = true
       state.shortcutsOpen = false
+      state.shortcutsHover = false
     }
   })
   .catch(() => {})
