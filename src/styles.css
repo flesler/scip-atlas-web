@@ -92,6 +92,34 @@ body {
   grid-template-columns: 1fr;
 }
 
+.toolbar-github-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.toolbar-github-link:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.toolbar-github-link svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.toolbar-github-link[hidden] {
+  display: none;
+}
+
 .layout.layout--awaiting-db .panel,
 .layout.layout--awaiting-db .detail {
   display: none;
