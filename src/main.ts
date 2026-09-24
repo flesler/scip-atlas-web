@@ -120,6 +120,7 @@ const detailPanel = app.querySelector<HTMLDivElement>("#detail-panel")!;
 const viewExplorerBtn = app.querySelector<HTMLButtonElement>("#view-explorer")!
 const viewDbBtn = app.querySelector<HTMLButtonElement>("#view-db")!
 const downloadBtn = app.querySelector<HTMLButtonElement>("#download-btn")!
+const toolbarEl = app.querySelector<HTMLElement>(".toolbar")!
 const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
 const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
 const githubLink = app.querySelector<HTMLAnchorElement>("#github-link")!
@@ -316,22 +317,42 @@ async function toggleDir(path: string): Promise<TreeNode | null> {
   return autoExpandSingletonChain(path)
 }
 
+function isStackedExplorerLayout() {
+  return window.matchMedia("(max-width: 900px)").matches && state.viewMode === "explorer"
+}
+
+function isMobileDetailOverlay() {
+  return (
+    isStackedExplorerLayout() &&
+    !!state.detailPath &&
+    !state.searchActive &&
+    state.viewMode === "explorer"
+  )
+}
+
+function syncToolbarHeight() {
+  app.style.setProperty("--app-toolbar-height", `${toolbarEl.offsetHeight}px`)
+}
+
 function syncExplorerLayout() {
+  const detailOpen =
+    state.viewMode === "explorer" && !!state.detailPath && !state.searchActive
+  const mobileOverlay = isMobileDetailOverlay()
+  syncToolbarHeight()
   layoutEl.classList.toggle(
     "layout--tree-only",
-    state.viewMode === "explorer" && (!state.detailPath || state.searchActive),
+    state.viewMode === "explorer" && (!detailOpen || state.searchActive || mobileOverlay),
   )
+  layoutEl.classList.toggle("layout--detail-open", detailOpen && !mobileOverlay)
+  layoutEl.classList.toggle("layout--detail-overlay", mobileOverlay)
   layoutEl.classList.toggle("layout--db", state.viewMode === "db")
+  detailPanel.classList.toggle("detail--overlay", mobileOverlay)
 }
 
 function hideDetailPanel() {
   state.detailPath = null
   detailPanel.innerHTML = ""
   syncExplorerLayout()
-}
-
-function scrollDetailPanelToTop() {
-  detailPanel.scrollTo({ top: 0, behavior: "smooth" })
 }
 
 function listingRows(): HTMLButtonElement[] {
@@ -341,10 +362,15 @@ function listingRows(): HTMLButtonElement[] {
   return [...treePanel.querySelectorAll<HTMLButtonElement>(".tree-row")]
 }
 
-function focusListingPath(path: string) {
+function focusListingPath(path: string, options?: { preventScroll?: boolean }) {
   const row = listingRows().find((item) => item.dataset.path === path)
-  row?.focus()
-  row?.scrollIntoView({ block: "center", behavior: "smooth" })
+  if (!row) {
+    return
+  }
+  row.focus({ preventScroll: options?.preventScroll ?? false })
+  if (!options?.preventScroll) {
+    row.scrollIntoView({ block: "center", behavior: "smooth" })
+  }
 }
 
 function selectedListingEntry(): { path: string; kind: "file" | "dir" } | null {
@@ -358,10 +384,10 @@ function selectedListingEntry(): { path: string; kind: "file" | "dir" } | null {
 function syncPanelForEntry(kind: "file" | "dir", path: string) {
   if (kind === "file") {
     state.detailPath = path
-  } else {
-    state.detailPath = null
-    hideDetailPanel()
+    syncExplorerLayout()
+    return
   }
+  hideDetailPanel()
 }
 
 async function focusEntry(path: string, kind: "file" | "dir", options?: { keepSearch?: boolean }) {
@@ -376,9 +402,10 @@ async function focusEntry(path: string, kind: "file" | "dir", options?: { keepSe
   syncPanelForEntry(kind, path)
   await expandAncestors(path)
   await render()
-  focusListingPath(path)
-  if (kind === "file") {
-    scrollDetailPanelToTop()
+  const mobileFileOverlay = kind === "file" && isMobileDetailOverlay()
+  focusListingPath(path, { preventScroll: mobileFileOverlay })
+  if (kind === "file" && !mobileFileOverlay) {
+    detailPanel.scrollTo({ top: 0, behavior: "smooth" })
   }
 }
 
@@ -393,6 +420,21 @@ async function focusParentOf(path: string): Promise<boolean> {
     return false
   }
   await focusEntry(parent, "dir")
+  return true
+}
+
+async function focusNextSiblingOfParent(path: string): Promise<boolean> {
+  const parent = parentDirPath(path)
+  if (!parent) {
+    return false
+  }
+  const parentSiblings = await siblingsOf(parent)
+  const parentIndex = parentSiblings.findIndex((node) => node.path === parent)
+  if (parentIndex < 0 || parentIndex >= parentSiblings.length - 1) {
+    return false
+  }
+  const next = parentSiblings[parentIndex + 1]
+  await focusEntry(next.path, next.kind)
   return true
 }
 
@@ -498,7 +540,9 @@ async function moveListingSelection(delta: number) {
     return
   }
   if (nextIndex >= siblings.length) {
-    await handleTreeArrowRight()
+    if (delta > 0 && state.selectedPath) {
+      await focusNextSiblingOfParent(state.selectedPath)
+    }
     return
   }
 
@@ -644,7 +688,6 @@ function beginSearchIfNeeded() {
     selectedPath: state.selectedPath,
     detailPath: state.detailPath,
   }
-  state.detailPath = null
   hideDetailPanel()
 }
 
@@ -783,7 +826,6 @@ function syncDownloadButton() {
 
 function syncLoadChrome() {
   loadScreen.hidden = state.loaded
-  githubLink.hidden = state.loaded
   if (!state.loaded) {
     state.shortcutsOpen = false
     state.shortcutsHover = false

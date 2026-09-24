@@ -130,9 +130,10 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.75rem;
   min-height: 0;
+  overflow-y: auto;
   padding: 2rem;
   text-align: center;
 }
@@ -162,7 +163,7 @@ body {
   grid-template-columns: 1fr;
 }
 
-.layout.layout--tree-only .detail {
+.layout.layout--tree-only .detail:not(.detail--overlay) {
   display: none;
 }
 
@@ -193,6 +194,7 @@ body {
   min-width: 0;
   overflow: auto;
   padding: 1rem 1.25rem;
+  background: var(--panel);
 }
 
 .detail-header {
@@ -594,6 +596,7 @@ body {
 }
 
 .shortcuts-dialog {
+  position: relative;
   width: min(40rem, 100%);
   max-height: min(85vh, 100%);
   overflow: auto;
@@ -603,6 +606,10 @@ body {
   color: var(--text);
   padding: 1rem 1.1rem 1.25rem;
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.2);
+}
+
+.shortcuts-dialog--has-release {
+  padding-bottom: 2.35rem;
 }
 
 .shortcuts-header {
@@ -638,6 +645,28 @@ body {
 .shortcuts-body {
   display: grid;
   gap: 1rem;
+}
+
+.shortcuts-release-btn {
+  position: absolute;
+  right: 0.65rem;
+  bottom: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.2rem;
+  cursor: pointer;
+  border-radius: 0.35rem;
+  opacity: 0.65;
+}
+
+.shortcuts-release-btn:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+  opacity: 1;
 }
 
 .shortcuts-section h3 {
@@ -688,6 +717,28 @@ body {
     grid-template-rows: minmax(0, 40vh) minmax(0, 1fr);
   }
 
+  .layout.layout--tree-only {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .layout.layout--detail-overlay .panel {
+    overflow: hidden;
+  }
+
+  .detail.detail--overlay {
+    position: fixed;
+    top: var(--app-toolbar-height, 3.25rem);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -8px 32px rgb(0 0 0 / 0.12);
+  }
+
   .panel {
     border-right: none;
     border-bottom: 1px solid var(--border);
@@ -695,5 +746,62 @@ body {
 
   .detail {
     min-height: 0;
+  }
+
+  .load-screen {
+    align-items: stretch;
+    padding: 1rem 1rem 2rem;
+  }
+
+  .shortcuts-inline {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .shortcuts-list {
+    grid-template-columns: 1fr;
+    gap: 0.2rem 0;
+  }
+
+  .shortcuts-list dt {
+    white-space: normal;
+  }
+
+  .shortcuts-list dd {
+    margin-bottom: 0.65rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .shortcuts-list dd:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .shortcuts-overlay {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: 0.75rem;
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .shortcuts-dialog {
+    max-height: none;
+    width: 100%;
+  }
+}
+
+@media (max-height: 500px) and (max-width: 932px) {
+  .shortcuts-overlay {
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+
+  .shortcuts-dialog {
+    max-height: none;
   }
 }

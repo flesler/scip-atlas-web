@@ -5,10 +5,10 @@ export function resolveRelease(): string {
     return process.env.RELEASE
   }
   if (process.env.GITHUB_SHA) {
-    return process.env.GITHUB_SHA.slice(0, 7)
+    return process.env.GITHUB_SHA
   }
   try {
-    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim()
+    return execSync("git rev-parse HEAD", { encoding: "utf8" }).trim()
   } catch {
     return "dev"
   }

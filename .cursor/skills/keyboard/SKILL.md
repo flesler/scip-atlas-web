@@ -7,7 +7,9 @@ description: Read when changing explorer or DB view keyboard navigation.
 
 Owner: `src/main.ts` (`document` keydown + `searchInput` keydown), `src/shortcuts-panel.ts`. `PAGE_STEPS = 5`.
 
-**Shortcuts panel:** user-facing curated list in `SHORTCUT_SECTIONS` — only non-obvious keys; inline below upload until DB loads; after load `?` toggles overlay. Agent docs below are the full behavior reference.
+**Shortcuts panel:** user-facing keys in `SHORTCUT_SECTIONS`. Chrome (inline vs overlay, `?` fab) → `layout` skill.
+
+**Mobile file detail:** fixed overlay sheet, not side-by-side — see `layout` skill.
 
 ## Explorer
 
@@ -22,7 +24,7 @@ Owner: `src/main.ts` (`document` keydown + `searchInput` keydown), `src/shortcut
 | Ctrl/Cmd+F | Focus search (overrides browser find) |
 | ? | Toggle shortcuts panel |
 
-**Boundaries (↑/↓):** at first sibling → parent; past last sibling → `→` (expand / first child).
+**Boundaries (↑/↓):** at first sibling → parent; past last sibling → parent's next sibling (if any).
 
 **Search:** ↑/↓/Page keys move hits without opening detail. ←/→ in the search box edit text; ←/→ elsewhere follow tree rules (disabled while search results are active). Enter opens first hit. Esc in search restores prior tree state.
 

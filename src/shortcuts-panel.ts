@@ -1,3 +1,5 @@
+import { readReleaseFromMeta } from "./release.js"
+
 export type ShortcutRow = {
   keys: string
   action: string
@@ -68,6 +70,27 @@ function renderShortcutsBody(): HTMLElement {
   return body
 }
 
+const RELEASE_NOTEBOOK_ICON =
+  '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4.5 1A1.5 1.5 0 0 0 3 2.5v11A1.5 1.5 0 0 0 4.5 15h7a1.5 1.5 0 0 0 1.5-1.5v-11A1.5 1.5 0 0 0 11.5 1h-7z"/><path fill="currentColor" d="M5 1v14"/><path fill="currentColor" fill-opacity=".45" d="M7 4h5v1H7zm0 2.5h5v1H7zm0 2.5h4v1H7z"/></svg>'
+
+function mountReleaseButton(dialog: HTMLElement) {
+  const release = readReleaseFromMeta()
+  if (!release) {
+    return
+  }
+  const button = document.createElement("button")
+  button.type = "button"
+  button.className = "shortcuts-release-btn"
+  button.innerHTML = RELEASE_NOTEBOOK_ICON
+  button.title = `Release: ${release}`
+  button.setAttribute("aria-label", `Copy release SHA ${release}`)
+  button.addEventListener("click", () => {
+    void navigator.clipboard.writeText(release)
+  })
+  dialog.appendChild(button)
+  dialog.classList.add("shortcuts-dialog--has-release")
+}
+
 export function mountShortcutsInline(parent: HTMLElement): HTMLDivElement {
   const inline = document.createElement("div")
   inline.className = "shortcuts-inline"
@@ -130,6 +153,7 @@ export function mountShortcutsOverlay(root: HTMLElement, onClose: () => void): H
   header.appendChild(close)
   dialog.appendChild(header)
   dialog.appendChild(renderShortcutsBody())
+  mountReleaseButton(dialog)
 
   overlay.appendChild(dialog)
   overlay.addEventListener("click", (event) => {
