@@ -17,6 +17,8 @@ import type { PathDetails, SearchHit, TreeNode, ViewMode } from "./types.js"
 import { renderDbDetails, renderDbTableList } from "./ui-db.js"
 import DbWorker from "./worker.ts?worker&inline"
 
+const PAGE_STEPS = 5;
+
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const state = {
   loaded: false,
@@ -129,6 +131,14 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path || "/";
 }
 
+function parentDirPath(path: string): string | null {
+  const index = path.lastIndexOf("/")
+  if (index < 0) {
+    return null
+  }
+  return path.slice(0, index)
+}
+
 function formatTime(epochSeconds: number | null | undefined): string {
   if (!epochSeconds) {
     return "";
@@ -177,11 +187,11 @@ async function runInitialTreeExpand() {
   await ensureChildren(null)
   const leaf = await autoExpandSingletonChain(null)
   if (leaf?.kind === "file") {
-    await selectFile(leaf.path)
+    await focusEntry(leaf.path, "file")
     return
   }
   if (leaf?.kind === "dir") {
-    state.selectedPath = leaf.path
+    await focusEntry(leaf.path, "dir")
   }
 }
 
@@ -229,45 +239,181 @@ function scrollDetailPanelToTop() {
   detailPanel.scrollTo({ top: 0, behavior: "smooth" })
 }
 
-function scrollSelectedTreeItemIntoView() {
-  treePanel.querySelector<HTMLElement>(".tree-row.selected")?.scrollIntoView({
-    block: "center",
-    behavior: "smooth",
-  })
+function listingRows(): HTMLButtonElement[] {
+  if (state.searchActive && state.searchQuery) {
+    return [...treePanel.querySelectorAll<HTMLButtonElement>(".search-result-row")]
+  }
+  return [...treePanel.querySelectorAll<HTMLButtonElement>(".tree-row")]
 }
 
-async function selectDir(path: string) {
-  state.selectedPath = path
-  state.searchActive = false
-  state.error = ""
-  hideDetailPanel()
-  await expandAncestors(path)
-  render()
+function focusListingPath(path: string) {
+  const row = listingRows().find((item) => item.dataset.path === path)
+  row?.focus()
+  row?.scrollIntoView({ block: "center", behavior: "smooth" })
 }
 
-async function selectFile(path: string) {
-  state.selectedPath = path
-  state.detailPath = path
-  state.searchActive = false
-  state.error = ""
-  scrollDetailPanelToTop()
-  await expandAncestors(path)
-  await render()
-  scrollSelectedTreeItemIntoView()
+function selectedListingEntry(): { path: string; kind: "file" | "dir" } | null {
+  const row = listingRows().find((item) => item.dataset.path === state.selectedPath)
+  if (!row?.dataset.path || !row.dataset.kind) {
+    return null
+  }
+  return { path: row.dataset.path, kind: row.dataset.kind as "file" | "dir" }
+}
+
+function syncPanelForEntry(kind: "file" | "dir", path: string) {
+  if (kind === "file") {
+    state.detailPath = path
+  } else {
+    state.detailPath = null
+    hideDetailPanel()
+  }
+}
+
+async function focusEntry(path: string, kind: "file" | "dir", options?: { keepSearch?: boolean }) {
   if (!path || !state.loaded) {
     return
   }
-  try {
-    const details = await fetchNode(path)
-    if (details.kind !== "file") {
-      hideDetailPanel()
+  state.selectedPath = path
+  state.error = ""
+  if (!options?.keepSearch) {
+    state.searchActive = false
+  }
+  syncPanelForEntry(kind, path)
+  await expandAncestors(path)
+  await render()
+  focusListingPath(path)
+  if (kind === "file") {
+    scrollDetailPanelToTop()
+  }
+}
+
+async function siblingsOf(path: string | null): Promise<TreeNode[]> {
+  const parent = path ? parentDirPath(path) : null
+  return state.treeCache.get(treeCacheKey(parent)) ?? await ensureChildren(parent)
+}
+
+async function focusParentOf(path: string): Promise<boolean> {
+  const parent = parentDirPath(path)
+  if (!parent) {
+    return false
+  }
+  await focusEntry(parent, "dir")
+  return true
+}
+
+async function handleTreeArrowLeft() {
+  const selected = selectedListingEntry()
+  if (!selected) {
+    await moveListingSelection(-1)
+    return
+  }
+  if (selected.kind === "dir" && state.expanded.has(selected.path)) {
+    state.expanded.delete(selected.path)
+    syncPanelForEntry(selected.kind, selected.path)
+    await render()
+    focusListingPath(selected.path)
+    return
+  }
+  if (await focusParentOf(selected.path)) {
+    return
+  }
+  await moveListingSelection(-1)
+}
+
+async function handleTreeArrowRight() {
+  let selected = selectedListingEntry()
+  if (!selected) {
+    const siblings = await siblingsOf(null)
+    if (!siblings.length) {
       return
     }
-    renderDetails(details)
-    syncExplorerLayout()
-    scrollDetailPanelToTop()
-  } catch (error) {
-    setError(error instanceof Error ? error.message : String(error))
+    await focusEntry(siblings[0].path, siblings[0].kind)
+    return
+  }
+
+  if (selected.kind !== "dir") {
+    focusListingPath(selected.path)
+    return
+  }
+
+  if (!state.expanded.has(selected.path)) {
+    state.expanded.add(selected.path)
+    await ensureChildren(selected.path)
+    await focusEntry(selected.path, "dir")
+    return
+  }
+
+  const children = await ensureChildren(selected.path)
+  if (!children.length) {
+    focusListingPath(selected.path)
+    return
+  }
+
+  const child = children[0]
+  await focusEntry(child.path, child.kind)
+}
+
+async function moveListingSelection(delta: number) {
+  if (state.searchActive && state.searchQuery) {
+    if (!state.searchHits.length) {
+      return
+    }
+    let rows = listingRows()
+    if (!rows.length) {
+      await render()
+      rows = listingRows()
+      if (!rows.length) {
+        return
+      }
+    }
+    let index = rows.findIndex((row) => row.dataset.path === state.selectedPath)
+    if (index < 0) {
+      index = delta > 0 ? 0 : rows.length - 1
+    } else {
+      index = Math.max(0, Math.min(rows.length - 1, index + delta))
+    }
+    const row = rows[index]
+    const path = row?.dataset.path
+    if (!path) {
+      return
+    }
+    state.selectedPath = path
+    await render()
+    focusListingPath(path)
+    return
+  }
+
+  const siblings = await siblingsOf(state.selectedPath || null)
+  if (!siblings.length) {
+    return
+  }
+
+  let index = state.selectedPath
+    ? siblings.findIndex((node) => node.path === state.selectedPath)
+    : -1
+  if (index < 0) {
+    const node = delta > 0 ? siblings[0] : siblings[siblings.length - 1]
+    await focusEntry(node.path, node.kind)
+    return
+  }
+
+  const nextIndex = index + delta
+  if (nextIndex < 0) {
+    await focusParentOf(state.selectedPath)
+    return
+  }
+  if (nextIndex >= siblings.length) {
+    await handleTreeArrowRight()
+    return
+  }
+
+  const node = siblings[nextIndex]
+  await focusEntry(node.path, node.kind)
+}
+
+function blurSearchForTreeKeys() {
+  if (document.activeElement === searchInput) {
+    searchInput.blur()
   }
 }
 
@@ -285,6 +431,7 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
     row.type = "button";
     row.className = `tree-row${state.selectedPath === node.path ? " selected" : ""}`;
     row.dataset.path = node.path;
+    row.dataset.kind = node.kind;
     const labelText = node.path ? basename(node.path) : "/"
     row.setAttribute("aria-label", node.kind === "dir" ? `Directory ${labelText}` : `File ${labelText}`);
 
@@ -319,15 +466,9 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
 
     row.addEventListener("click", async () => {
       if (node.kind === "dir") {
-        const leaf = await toggleDir(node.path)
-        if (leaf?.kind === "file") {
-          await selectFile(leaf.path)
-          return
-        }
-        await selectDir(leaf?.path ?? node.path)
-        return
+        await toggleDir(node.path)
       }
-      await selectFile(node.path)
+      await focusEntry(node.path, node.kind)
     });
 
     item.appendChild(row);
@@ -353,7 +494,7 @@ function renderDetails(details: PathDetails) {
       <h2>${details.path}</h2>
       <button type="button" class="detail-close" aria-label="Close file panel" title="Close file details and expand the tree to full width.">×</button>
     </div>
-    <p class="meta">file${meta ? ` · ${meta}` : ""}</p>
+    ${meta ? `<p class="meta">${meta}</p>` : ""}
     ${overlay?.summary ? `<p>${overlay.summary}</p>` : ""}
     <section class="section">
       <h3>Defined symbols</h3>
@@ -384,7 +525,7 @@ function renderDetails(details: PathDetails) {
     button.addEventListener("click", () => {
       const path = button.getAttribute("data-path");
       if (path) {
-        void selectFile(path);
+        void focusEntry(path, "file");
       }
     });
   });
@@ -451,11 +592,7 @@ async function finishSearchClear(restore = true) {
 
 async function pickSearchHit(hit: SearchHit) {
   clearSearch(true)
-  if (hit.kind === "file") {
-    await selectFile(hit.path)
-    return
-  }
-  await selectDir(hit.path)
+  await focusEntry(hit.path, hit.kind)
 }
 
 function renderSearchResultsList(container: HTMLElement, hits: SearchHit[]) {
@@ -469,7 +606,9 @@ function renderSearchResultsList(container: HTMLElement, hits: SearchHit[]) {
     const item = document.createElement("li")
     const row = document.createElement("button")
     row.type = "button"
-    row.className = "search-result-row"
+    row.className = `search-result-row${state.selectedPath === hit.path ? " selected" : ""}`
+    row.dataset.path = hit.path
+    row.dataset.kind = hit.kind
     row.appendChild(createTreeIcon(hit.kind))
 
     const label = document.createElement("span")
@@ -612,6 +751,9 @@ async function render() {
     return
   }
   renderTreeNodes(null, treePanel)
+  if (state.detailPath && !state.searchActive) {
+    await restoreDetailIfOpen()
+  }
 }
 
 async function handleFile(file: File) {
@@ -668,6 +810,47 @@ document.addEventListener("keydown", (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) {
     return
   }
+
+  if (
+    event.key === "ArrowUp" ||
+    event.key === "ArrowDown" ||
+    event.key === "PageUp" ||
+    event.key === "PageDown" ||
+    event.key === "ArrowLeft" ||
+    event.key === "ArrowRight"
+  ) {
+    const fromSearch = event.target === searchInput
+    if (fromSearch || !isEditableTarget(event.target)) {
+      event.preventDefault()
+      blurSearchForTreeKeys()
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        const delta = event.key === "ArrowDown" ? 1 : -1
+        void moveListingSelection(delta)
+      } else if (event.key === "PageUp" || event.key === "PageDown") {
+        const delta = event.key === "PageDown" ? PAGE_STEPS : -PAGE_STEPS
+        void moveListingSelection(delta)
+      } else if (!state.searchActive || !state.searchQuery) {
+        if (event.key === "ArrowLeft") {
+          void handleTreeArrowLeft()
+        } else {
+          void handleTreeArrowRight()
+        }
+      }
+    }
+    return
+  }
+
+  if (event.key === "Escape") {
+    if (event.target === searchInput) {
+      return
+    }
+    if (state.detailPath) {
+      event.preventDefault()
+      hideDetailPanel()
+    }
+    return
+  }
+
   if (isEditableTarget(event.target)) {
     return
   }

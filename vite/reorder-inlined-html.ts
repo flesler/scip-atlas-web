@@ -1,4 +1,5 @@
 import type { Plugin } from "vite"
+import { faviconLink } from "./favicon.js"
 import { releaseMetaTag, resolveRelease } from "./release-meta.js"
 
 export function reorderInlinedHtml(html: string, release = resolveRelease()): string {
@@ -17,6 +18,7 @@ export function reorderInlinedHtml(html: string, release = resolveRelease()): st
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     ${releaseMetaTag(release)}
+    ${faviconLink()}
     ${title}
     ${styleMatch[0]}
   </head>

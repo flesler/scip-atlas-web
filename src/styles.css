@@ -333,8 +333,13 @@ body {
   font: inherit;
 }
 
-.search-result-row:hover {
+.search-result-row:hover,
+.search-result-row.selected {
   background: var(--accent-soft);
+}
+
+.search-result-row.selected .tree-icon {
+  color: var(--accent);
 }
 
 .search-result-name {

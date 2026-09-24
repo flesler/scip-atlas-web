@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 
 export const INDEX_DB = "index.db";
@@ -31,8 +32,41 @@ export function projectCacheSlug(projectRoot: string): string {
   return `${slug}-${digest}`;
 }
 
+export function scipCliProjectsDir(): string {
+  return path.join(homedir(), ".cache", "scip-cli", "projects");
+}
+
 export function scipCliCacheDir(projectRoot: string): string {
-  return path.join(homedir(), ".cache", "scip-cli", "projects", projectCacheSlug(projectRoot));
+  return path.join(scipCliProjectsDir(), projectCacheSlug(projectRoot));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function resolveProjectCacheDir(name: string, projectsDir = scipCliProjectsDir()): string {
+  const exact = path.join(projectsDir, name);
+  if (fs.existsSync(exact) && fs.statSync(exact).isDirectory()) {
+    return exact;
+  }
+
+  if (!fs.existsSync(projectsDir)) {
+    throw new PathsError(`no scip-cli projects cache at ${projectsDir}`);
+  }
+
+  const pattern = new RegExp(`^${escapeRegExp(name)}-[a-f0-9]{6}$`);
+  const matches = fs.readdirSync(projectsDir).filter((entry) => {
+    const full = path.join(projectsDir, entry);
+    return fs.statSync(full).isDirectory() && pattern.test(entry);
+  });
+
+  if (matches.length === 1) {
+    return path.join(projectsDir, matches[0]);
+  }
+  if (matches.length > 1) {
+    throw new PathsError(`ambiguous project "${name}": ${matches.join(", ")}`);
+  }
+  throw new PathsError(`unknown project "${name}" in ${projectsDir}`);
 }
 
 export function defaultIndexPath(projectRoot: string): string {
@@ -82,12 +116,45 @@ export type ResolvedPaths = {
 
 export function resolvePackPaths(options: {
   repo?: string;
+  project?: string;
   index?: string;
   atlas?: string;
   output?: string;
 }): ResolvedPaths {
-  const repoPath = options.repo ? resolveGitRoot(options.repo) : resolveGitRoot();
-  const indexPath = path.resolve(options.index ?? defaultIndexPath(repoPath));
+  if (options.repo && options.project) {
+    throw new PathsError("use only one of --repo and --project");
+  }
+
+  let repoPath: string;
+  let indexPath: string;
+
+  if (options.index) {
+    indexPath = path.resolve(options.index);
+    if (options.project) {
+      const resolved = path.resolve(options.project);
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+        repoPath = resolved;
+      } else {
+        repoPath = resolveProjectCacheDir(options.project);
+      }
+    } else {
+      repoPath = options.repo ? resolveGitRoot(options.repo) : resolveGitRoot();
+    }
+  } else if (options.project) {
+    const resolved = path.resolve(options.project);
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+      repoPath = resolved;
+      indexPath = path.resolve(defaultIndexPath(resolved));
+    } else {
+      const cacheDir = resolveProjectCacheDir(options.project);
+      repoPath = cacheDir;
+      indexPath = path.join(cacheDir, INDEX_DB);
+    }
+  } else {
+    repoPath = options.repo ? resolveGitRoot(options.repo) : resolveGitRoot();
+    indexPath = path.resolve(defaultIndexPath(repoPath));
+  }
+
   const atlasPath = path.resolve(options.atlas ?? defaultAtlasPath(indexPath));
   const outputPath = path.resolve(options.output ?? defaultOutputPath(atlasPath));
   return { repoPath, indexPath, atlasPath, outputPath };

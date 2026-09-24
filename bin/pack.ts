@@ -6,6 +6,7 @@ import { PathsError, resolvePackPaths } from "./pack/paths.js";
 function parseArgs(argv: string[]) {
   const options: {
     repo?: string;
+    project?: string;
     index?: string;
     atlas?: string;
     output?: string;
@@ -16,6 +17,8 @@ function parseArgs(argv: string[]) {
     const arg = argv[i];
     if (arg === "--repo") {
       options.repo = argv[++i];
+    } else if (arg === "--project") {
+      options.project = argv[++i];
     } else if (arg === "--index") {
       options.index = argv[++i];
     } else if (arg === "--atlas") {
@@ -41,10 +44,11 @@ function printHelp() {
   console.log(`Usage: npx tsx bin/pack.ts [options]
 
 Options:
-  --repo PATH    Git repo root (default: git root of cwd)
-  --index PATH   Full scip-cli index.db (default: ~/.cache/scip-cli/.../index.db)
-  --atlas PATH   Atlas sidecar (default: atlas.db beside index)
-  --output PATH  Output explorer.db (default: explorer.db beside atlas)
+  --repo PATH      Git repo root (default: git root of cwd)
+  --project NAME   scip-cli cache slug or basename (e.g. my-app -> my-app-1a3f7a)
+  --index PATH     Full scip-cli index.db (default: ~/.cache/scip-cli/.../index.db)
+  --atlas PATH     Atlas sidecar (default: atlas.db beside index)
+  --output PATH    Output explorer.db (default: explorer.db beside atlas)
   --compress     Write gzip-compressed explorer.db.gz instead of explorer.db
 `);
 }
