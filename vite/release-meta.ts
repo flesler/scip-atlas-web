@@ -1,14 +1,20 @@
 import { execSync } from "node:child_process"
 
+const RELEASE_SHA_LENGTH = 7
+
+export function shortReleaseSha(value: string): string {
+  return value.slice(0, RELEASE_SHA_LENGTH)
+}
+
 export function resolveRelease(): string {
   if (process.env.RELEASE) {
-    return process.env.RELEASE
+    return shortReleaseSha(process.env.RELEASE)
   }
   if (process.env.GITHUB_SHA) {
-    return process.env.GITHUB_SHA
+    return shortReleaseSha(process.env.GITHUB_SHA)
   }
   try {
-    return execSync("git rev-parse HEAD", { encoding: "utf8" }).trim()
+    return execSync("git rev-parse --short HEAD", { encoding: "utf8" }).trim()
   } catch {
     return "dev"
   }

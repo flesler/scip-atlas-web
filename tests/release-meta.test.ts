@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest"
-import { escapeAttr, releaseMetaTag } from "../vite/release-meta.js"
+import { escapeAttr, releaseMetaTag, shortReleaseSha } from "../vite/release-meta.js"
 import { reorderInlinedHtml } from "../vite/reorder-inlined-html.js"
 
 describe("release meta", () => {
   it("escapes attribute values", () => {
     expect(escapeAttr(`a"b&c`)).toBe(`a&quot;b&amp;c`)
+  })
+
+  it("shortens to 7 characters", () => {
+    expect(shortReleaseSha("deadbeef0123456789")).toBe("deadbee")
   })
 
   it("renders a release meta tag", () => {

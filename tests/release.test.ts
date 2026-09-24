@@ -20,4 +20,8 @@ describe("readReleaseFromMeta", () => {
   it("ignores build placeholder", () => {
     expect(readReleaseFromMeta(metaDoc("__RELEASE__"))).toBeNull()
   })
+
+  it("uses first 7 characters", () => {
+    expect(readReleaseFromMeta(metaDoc("deadbeef0123456789"))).toBe("deadbee")
+  })
 })
