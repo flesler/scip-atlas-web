@@ -141,7 +141,7 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
   const uncompressedBytes = fs.statSync(dbPath).size
   let outputBytes = uncompressedBytes
   if (options.compress) {
-    fs.writeFileSync(finalPath, gzipSync(fs.readFileSync(dbPath), { level: 6 }))
+    fs.writeFileSync(finalPath, gzipSync(fs.readFileSync(dbPath), { level: 5 }))
     fs.unlinkSync(dbPath)
     outputBytes = fs.statSync(finalPath).size
     console.log(

@@ -16,6 +16,8 @@ npx tsx bin/pack.ts --compress --output ~/Desktop/explorer.db.gz
 NEVER skip repack when pack output shape or symbol/query logic changed.
 NEVER ask whether to update `~/Desktop/explorer.db.gz` — always do it.
 
+Gzip level for `--compress`: **5** — see `docs/gzip.md`.
+
 Uses git root + scip-cli cache by default (`--repo`). Override with `--project`, `--index`, or `--atlas` when needed.
 
 Other tables copy via `INSERT … SELECT` in `bin/pack/slim.ts`. Only `global_symbols` uses custom logic — see `global-symbols` skill.
