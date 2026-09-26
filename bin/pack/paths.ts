@@ -3,9 +3,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { FALLBACK_PACKED_DB, packedDbBasename } from "./meta.js";
 
 export const INDEX_DB = "index.db";
-export const EXPLORER_DB = "explorer.db";
+export const EXPLORER_DB = FALLBACK_PACKED_DB;
 export const CACHE_SLUG_MAX_LEN = 48;
 export const ROOT_HASH_LEN = 12;
 
@@ -78,7 +79,37 @@ export function defaultAtlasPath(indexPath: string): string {
 }
 
 export function defaultOutputPath(atlasPath: string): string {
-  return path.join(path.dirname(atlasPath), EXPLORER_DB);
+  return path.join(path.dirname(atlasPath), packedDbBasename(atlasPath));
+}
+
+function looksLikePackedDbFile(name: string): boolean {
+  return name.endsWith(".db") || name.endsWith(".db.gz");
+}
+
+export function resolveOutputPath(output: string | undefined, atlasPath: string): string {
+  if (!output) {
+    return defaultOutputPath(atlasPath);
+  }
+
+  const resolved = path.resolve(output);
+  const inferredName = packedDbBasename(atlasPath);
+
+  if (fs.existsSync(resolved)) {
+    if (fs.statSync(resolved).isDirectory()) {
+      return path.join(resolved, inferredName);
+    }
+    return resolved;
+  }
+
+  if (output.endsWith("/") || output.endsWith(path.sep)) {
+    return path.join(resolved, inferredName);
+  }
+
+  if (looksLikePackedDbFile(path.basename(resolved))) {
+    return resolved;
+  }
+
+  return path.join(resolved, inferredName);
 }
 
 export function compressedOutputPath(outputPath: string): string {
@@ -156,6 +187,6 @@ export function resolvePackPaths(options: {
   }
 
   const atlasPath = path.resolve(options.atlas ?? defaultAtlasPath(indexPath));
-  const outputPath = path.resolve(options.output ?? defaultOutputPath(atlasPath));
+  const outputPath = resolveOutputPath(options.output, atlasPath);
   return { repoPath, indexPath, atlasPath, outputPath };
 }

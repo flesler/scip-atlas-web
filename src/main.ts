@@ -75,7 +75,7 @@ app.innerHTML = `
         type="button"
         role="tab"
         aria-selected="false"
-        title="Browse raw SQLite tables in the loaded explorer.db (debug view)."
+        title="Browse raw SQLite tables in the loaded packed DB (debug view)."
         disabled
       >DB</button>
     </div>
@@ -83,7 +83,7 @@ app.innerHTML = `
       id="download-btn"
       type="button"
       aria-label="Download offline app"
-      title="Save this explorer as a single HTML file for offline use (open via file://). Does not include your database—you load explorer.db separately each time."
+      title="Save this explorer as a single HTML file for offline use (open via file://). Does not include your database—you load the packed .db separately each time."
     >Download offline</button>
     <a
       id="github-link"
@@ -99,16 +99,16 @@ app.innerHTML = `
     <div
       class="load-screen"
       id="load-screen"
-      title="Drop explorer.db or explorer.db.gz anywhere on the page to load it."
+      title="Drop a packed .db or .db.gz anywhere on the page to load it."
     >
       <label
         class="button primary load-button"
-        title="Choose explorer.db or explorer.db.gz from the pack CLI. Data stays in your browser only; reload the page to switch databases."
+        title="Choose a packed .db or .db.gz from the pack CLI. Data stays in your browser only; reload the page to switch databases."
       >
-        Load explorer DB file
+        Load packed DB file
         <input id="db-input" type="file" accept=".db,.gz" hidden />
       </label>
-      <p class="meta">or drop explorer.db / explorer.db.gz here</p>
+      <p class="meta">or drop a packed .db / .db.gz here</p>
     </div>
     <aside class="panel" id="tree-panel"></aside>
     <main class="detail" id="detail-panel"></main>
@@ -1032,7 +1032,7 @@ async function handleFile(file: File) {
   }
   const lower = file.name.toLowerCase();
   if (lower.endsWith("-wal") || lower.endsWith("-shm")) {
-    throw new Error("load explorer.db, not -wal or -shm sidecars");
+    throw new Error("load the packed .db, not -wal or -shm sidecars");
   }
   const bytes = await file.arrayBuffer();
   const health = await loadDatabase(bytes, file.name);

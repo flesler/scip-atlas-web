@@ -25,7 +25,7 @@ function parseArgs(argv: string[]) {
       options.atlas = argv[++i];
     } else if (arg === "--output") {
       options.output = argv[++i];
-    } else if (arg === "--compress") {
+    } else if (arg === "--compress" || arg === "--gzip") {
       options.compress = true;
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
@@ -48,8 +48,8 @@ Options:
   --project NAME   scip-cli cache slug or basename (e.g. my-app -> my-app-1a3f7a)
   --index PATH     Full scip-cli index.db (default: ~/.cache/scip-cli/.../index.db)
   --atlas PATH     Atlas sidecar (default: atlas.db beside index)
-  --output PATH    Output explorer.db (default: explorer.db beside atlas)
-  --compress     Write gzip-compressed explorer.db.gz instead of explorer.db
+  --output PATH    Output file or directory (dir → <github_repo>.db or explorer.db inside)
+  --gzip           Write .db.gz instead of .db (alias: --compress)
 `);
 }
 

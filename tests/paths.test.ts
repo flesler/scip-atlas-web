@@ -2,17 +2,23 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
+import { sanitizePackedDbRepoName, packedDbBasename } from "../bin/pack/meta.js"
 import {
   PathsError,
   compressedOutputPath,
   defaultIndexPath,
+  defaultOutputPath,
   explorerDbPath,
   projectCacheSlug,
   resolveGitRoot,
+  resolveOutputPath,
   resolvePackPaths,
   resolveProjectCacheDir,
 } from "../bin/pack/paths.js"
+
+const FIXTURE_ATLAS = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures", "atlas.db")
 
 const tempDirs: string[] = [];
 
@@ -54,12 +60,29 @@ describe("project paths", () => {
     expect(resolveGitRoot(subdir)).toBe(path.resolve(repo));
   });
 
-  it("maps compressed explorer output paths", () => {
-    expect(compressedOutputPath("/cache/explorer.db")).toBe("/cache/explorer.db.gz")
-    expect(compressedOutputPath("/cache/explorer.db.gz")).toBe("/cache/explorer.db.gz")
-    expect(explorerDbPath("/cache/explorer.db.gz")).toBe("/cache/explorer.db")
+  it("maps compressed packed output paths", () => {
+    expect(compressedOutputPath("/cache/sample-app.db")).toBe("/cache/sample-app.db.gz")
+    expect(compressedOutputPath("/cache/sample-app.db.gz")).toBe("/cache/sample-app.db.gz")
+    expect(explorerDbPath("/cache/sample-app.db.gz")).toBe("/cache/sample-app.db")
     expect(explorerDbPath("/cache/explorer.db")).toBe("/cache/explorer.db")
-  });
+  })
+
+  it("sanitizes atlas github_repo into a packed db basename", () => {
+    expect(sanitizePackedDbRepoName("sample-app")).toBe("sample-app")
+    expect(sanitizePackedDbRepoName("")).toBe("explorer")
+    expect(packedDbBasename(FIXTURE_ATLAS)).toBe("sample-app.db")
+    expect(defaultOutputPath(FIXTURE_ATLAS)).toBe(path.join(path.dirname(FIXTURE_ATLAS), "sample-app.db"))
+  })
+
+  it("resolves --output as a file or directory", () => {
+    const atlasPath = FIXTURE_ATLAS
+    const parent = path.dirname(atlasPath)
+    expect(resolveOutputPath(undefined, atlasPath)).toBe(path.join(parent, "sample-app.db"))
+    expect(resolveOutputPath(parent, atlasPath)).toBe(path.join(parent, "sample-app.db"))
+    expect(resolveOutputPath(`${parent}/`, atlasPath)).toBe(path.join(parent, "sample-app.db"))
+    expect(resolveOutputPath(path.join(parent, "custom.db"), atlasPath)).toBe(path.join(parent, "custom.db"))
+    expect(resolveOutputPath(path.join(parent, "nested"), atlasPath)).toBe(path.join(parent, "nested", "sample-app.db"))
+  })
 
   it("builds default index path under scip-cli cache", () => {
     const repo = makeGitRepo();

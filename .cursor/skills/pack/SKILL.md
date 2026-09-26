@@ -10,11 +10,11 @@ description: Read when changing pack logic or repacking explorer.db.gz.
 After edits to `bin/pack/**`, `bin/pack.ts`, `src/symbols.ts`, or `src/queries.ts`, repack without asking:
 
 ```bash
-npx tsx bin/pack.ts --compress --output ~/Desktop/explorer.db.gz
+npx tsx bin/pack.ts --gzip
 ```
 
 NEVER skip repack when pack output shape or symbol/query logic changed.
-NEVER ask whether to update `~/Desktop/explorer.db.gz` — always do it.
+Default output is `<github_repo>.db` beside atlas (from meta); use the printed `Output:` path. For a fixed desktop copy, pass `--output ~/Desktop/<repo>.db.gz`.
 
 Gzip level for `--compress`: **5** — see `docs/gzip.md`.
 

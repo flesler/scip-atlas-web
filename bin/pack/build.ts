@@ -71,6 +71,8 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
 
   checkpointAtlas(atlasPath);
 
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
   for (const filePath of [dbPath, finalPath]) {
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath)
@@ -178,11 +180,14 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
     )
   }
 
+  const outputPath = path.resolve(options.compress ? finalPath : dbPath)
+  console.log(`Output: ${outputPath}`)
+
   return {
     indexBytes,
     atlasBytes,
     outputBytes,
-    outputPath: options.compress ? finalPath : dbPath,
+    outputPath,
     uncompressedBytes: options.compress ? uncompressedBytes : undefined,
   }
 }
