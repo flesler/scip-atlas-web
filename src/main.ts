@@ -635,6 +635,7 @@ function renderDetails(details: PathDetails) {
     </div>
     ${meta ? `<p class="meta">${meta}</p>` : ""}
     ${overlay?.summary ? `<p>${overlay.summary}</p>` : ""}
+    ${details.owners.length ? `<section class="section"><h3>Owners</h3>${renderOwnerList(details.owners)}</section>` : ""}
     <section class="section">
       <h3>Defined symbols</h3>
       ${
@@ -648,7 +649,6 @@ function renderDetails(details: PathDetails) {
           : `<p class="meta">No symbols indexed for this file.</p>`
       }
     </section>
-    ${details.owners.length ? `<section class="section"><h3>Owners</h3>${renderOwnerList(details.owners)}</section>` : ""}
     <section class="section">
       <h3>Imports</h3>
       ${renderPathList(details.deps)}
