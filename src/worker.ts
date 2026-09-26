@@ -4,6 +4,7 @@ import sqlite3Wasm from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url"
 import { maybeDecompress } from "./decompress.js"
 import { listAllowedTables, listTables, tableRows, tableSchema, type QueryAll } from "./inspect.js"
 import { SQL } from "./queries.js"
+import { buildSearchQuery, searchStrategies } from "./search-query.js"
 import { listTree } from "./tree.js"
 import type { HealthInfo, PathDetails, SearchHit, SymbolRow, WorkerRequest, WorkerResponse } from "./types.js"
 
@@ -152,11 +153,18 @@ function search(query: string): SearchHit[] {
   if (!db) {
     return [];
   }
-  const term = query.trim();
-  if (!term) {
+  const tokens = query.trim().split(/\s+/).filter(Boolean)
+  if (!tokens.length) {
     return [];
   }
-  return queryAll<SearchHit>(db, SQL.search, term, term, term)
+  for (const strategy of searchStrategies(tokens)) {
+    const { sql, binds } = buildSearchQuery(tokens, strategy.style, strategy.combine)
+    const hits = queryAll<SearchHit>(db, sql, ...binds)
+    if (hits.length) {
+      return hits
+    }
+  }
+  return []
 }
 
 function health(): HealthInfo {

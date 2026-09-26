@@ -66,28 +66,6 @@ export const SQL = {
       AND d.relative_path != ?
     ORDER BY d.relative_path
   `,
-  search: `
-    SELECT path, name, kind, summary
-    FROM (
-      SELECT relative_path AS path, name, 'file' AS kind, summary, 0 AS rank
-      FROM files
-      WHERE name LIKE ? || '%'
-      UNION ALL
-      SELECT relative_path AS path, name, 'dir' AS kind, summary, 0 AS rank
-      FROM dirs
-      WHERE name LIKE ? || '%'
-      UNION ALL
-      SELECT f.relative_path AS path, f.name, 'file' AS kind, f.summary, 1 AS rank
-      FROM global_symbols gs
-      JOIN defn_enclosing_ranges der ON der.symbol_id = gs.id
-      JOIN documents d ON der.document_id = d.id
-      JOIN files f ON f.relative_path = d.relative_path
-      WHERE gs.display_name LIKE ? || '%'
-    )
-    GROUP BY path, kind
-    ORDER BY MIN(rank), CASE kind WHEN 'file' THEN 0 ELSE 1 END, path
-    LIMIT 50
-  `,
   tableNames: `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,
   chunkColumns: `PRAGMA table_info(chunks)`,
 } as const

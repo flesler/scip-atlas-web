@@ -54,8 +54,8 @@ app.innerHTML = `
     <input
       id="search-input"
       type="search"
-      placeholder="Type to search files by name or symbols..."
-      title="Find files and folders by name or defined symbol prefix. Type anywhere to search; Enter opens the first match; Esc restores the tree."
+      placeholder="Type to search by name, path (src/foo), or symbols..."
+      title="Find files and folders by name or path (path when the query contains /), or symbols. Tries prefix matches first, then substring; multi-word queries try AND then OR. Enter opens the first match; Esc restores the tree."
       disabled
     />
     <div class="view-toggle" role="tablist" aria-label="View mode">
