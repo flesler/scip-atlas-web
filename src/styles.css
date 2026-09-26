@@ -220,15 +220,31 @@ body {
   word-break: break-word;
 }
 
-.detail-title-link,
-.detail-meta-link {
+.external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   color: var(--accent);
   text-decoration: none;
 }
 
-.detail-title-link:hover,
-.detail-meta-link:hover {
+.external-link:hover {
   text-decoration: underline;
+}
+
+.external-link-icon-wrap {
+  display: inline-flex;
+  flex: none;
+  line-height: 0;
+  opacity: 0.75;
+}
+
+.external-link:hover .external-link-icon-wrap {
+  opacity: 1;
+}
+
+.detail-title-link.external-link {
+  word-break: break-word;
 }
 
 .detail-close {

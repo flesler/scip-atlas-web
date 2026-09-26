@@ -9,6 +9,7 @@ import {
 } from "./db-client.js"
 import { canDownloadApp, downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
+import { createTreeIcon, externalLinkHtml, iconHtml } from "./icons.js"
 import { flattenInspectTableNames, groupInspectTables } from "./inspect.js"
 import { commitUrl, fileBlobUrl, resolveBlobRef } from "./remote-links.js"
 import {
@@ -18,7 +19,6 @@ import {
   setShortcutsOverlayOpen,
 } from "./shortcuts-panel.js"
 import "./styles.css"
-import { createTreeIcon } from "./tree-icons.js"
 import { ROOT_TREE_KEY, treeCacheKey } from "./tree.js"
 import type { PathDetails, RemoteInfo, SearchHit, TreeNode, ViewMode } from "./types.js"
 import { renderDbDetails, renderDbTableList } from "./ui-db.js"
@@ -93,7 +93,7 @@ app.innerHTML = `
       rel="noopener noreferrer"
       aria-label="View source on GitHub"
       title="View source on GitHub"
-    ><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    ></a>
   </header>
   <div class="layout layout--awaiting-db">
     <div
@@ -126,6 +126,7 @@ const toolbarEl = app.querySelector<HTMLElement>(".toolbar")!
 const layoutEl = app.querySelector<HTMLDivElement>(".layout")!;
 const loadScreen = app.querySelector<HTMLDivElement>("#load-screen")!;
 const githubLink = app.querySelector<HTMLAnchorElement>("#github-link")!
+githubLink.innerHTML = iconHtml("github", { size: 16 })
 const shortcutsInline = mountShortcutsInline(loadScreen)
 const shortcutsOverlay = mountShortcutsOverlay(app, () => {
   closeShortcutsPanel()
@@ -658,7 +659,7 @@ function renderDetailMeta(details: PathDetails): string {
     return `<p class="meta">${escaped}</p>`
   }
   const url = commitUrl(state.remote, overlay.commit_sha)
-  return `<p class="meta"><a class="detail-meta-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escaped}</a></p>`
+  return `<p class="meta">${externalLinkHtml(url, escaped, { className: "detail-meta-link" })}</p>`
 }
 
 function renderDetailTitle(details: PathDetails): string {
@@ -668,7 +669,7 @@ function renderDetailTitle(details: PathDetails): string {
     return `<h2>${path}</h2>`
   }
   const label = state.remote?.host.includes("gitlab") ? "Open on GitLab" : "Open on GitHub"
-  return `<h2><a class="detail-title-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="${label}">${path}</a></h2>`
+  return `<h2>${externalLinkHtml(url, path, { className: "detail-title-link", title: label, iconSize: 14 })}</h2>`
 }
 
 function renderSymbolItem(details: PathDetails, symbol: PathDetails["symbols"][number]): string {
@@ -681,7 +682,7 @@ function renderSymbolItem(details: PathDetails, symbol: PathDetails["symbols"][n
     return `<li>${escapeHtml(symbol.display_name)} ${range}</li>`
   }
   const url = fileBlobUrl(state.remote, details.path, ref, symbol.start_line, symbol.end_line)
-  return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(symbol.display_name)}</a> ${range}</li>`
+  return `<li>${externalLinkHtml(url, escapeHtml(symbol.display_name))} ${range}</li>`
 }
 
 function renderDetails(details: PathDetails) {
