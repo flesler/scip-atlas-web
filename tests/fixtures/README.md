@@ -6,7 +6,15 @@ Checked-in inputs for pack/SPA tests. **Not a real repo** — a minimal syntheti
 | --- | --- | --- |
 | `index.db` | scip-cli reindex on fake `src/**` tree | Full SCIP graph (37 files, deps/rdeps) |
 | `atlas.db` | scip-atlas sync on same tree | Overlay: `files`, `dirs`, `commits`, `committers`, `owners`, `file_owners`, `meta` (no summaries) |
+| `search.db` | `bootstrap.ts` (optional) | Debug export of the in-memory search fixture |
+| `explorer.db` | `bootstrap.ts` via `buildExplorerDb` | Packed sample-app DB (gitignored; built once, loaded into memory per test run) |
 
-Tests call `buildExplorerDb()` at runtime; `explorer.db` is never committed.
+Tests use `:memory:` fixtures via `openFixture()` — no per-test disk files.
 
-Regenerate only when schema or graph expectations change (requires scip-cli + scip-atlas on a matching fake repo). Do not commit `*.db-shm` / `*.db-wal`.
+Regenerate disk exports (optional):
+
+```bash
+npm run bootstrap:fixtures
+```
+
+Do not commit `*.db-shm` / `*.db-wal`.

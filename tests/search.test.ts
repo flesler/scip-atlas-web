@@ -1,5 +1,4 @@
-import Database from "better-sqlite3"
-import { afterEach, describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import {
   buildSearchQuery,
   parseSearchTokens,
@@ -8,21 +7,35 @@ import {
   type SearchMatchStyle,
   type SearchTokenCombine,
 } from "../src/search-query.js"
-import { asQueryAll, cleanupExplorerFixtures, openExplorer } from "./open-explorer.js"
+import type { SearchHit } from "../src/types.js"
+import { asQueryAll, openFixture } from "./open-explorer.js"
+
+type ExpectedHit = Pick<SearchHit, "path" | "kind">
+
+function paths(hits: SearchHit[]): string[] {
+  return hits.map((hit) => hit.path)
+}
 
 function searchWith(
-  db: ReturnType<typeof openExplorer>,
   tokens: string[],
   style: SearchMatchStyle,
   combine: SearchTokenCombine,
-) {
+): SearchHit[] {
+  const db = openFixture("search")
   const { sql, binds } = buildSearchQuery(tokens, style, combine)
-  return db.prepare(sql).all(...binds) as { path: string; name: string; kind: string }[]
+  return db.prepare(sql).all(...binds) as SearchHit[]
 }
 
-afterEach(() => {
-  cleanupExplorerFixtures()
-})
+function expectHits(hits: SearchHit[], expected: ExpectedHit[]): void {
+  expect(hits.map((hit) => ({ path: hit.path, kind: hit.kind }))).toEqual(expected)
+}
+
+function expectDescendingCommitTimes(hits: SearchHit[]): void {
+  expect(hits.length).toBeGreaterThanOrEqual(2)
+  for (let i = 1; i < hits.length; i++) {
+    expect(hits[i].commit_time).toBeLessThanOrEqual(hits[i - 1].commit_time ?? 0)
+  }
+}
 
 describe("search SQL", () => {
   it("tokenizes on whitespace", () => {
@@ -30,101 +43,53 @@ describe("search SQL", () => {
     expect(parseSearchTokens("")).toEqual([])
   })
 
-  it("matches file and dir basenames by substring on name", () => {
-    const db = openExplorer()
-    const hits = runSearch(asQueryAll(db), "elper")
-
-    db.close()
-
-    expect(hits.length).toBeGreaterThan(0)
-    expect(hits.every((hit) => hit.name.includes("elper"))).toBe(true)
-    expect(hits.some((hit) => hit.path === "src/helper.ts")).toBe(true)
+  it.each<[string, ExpectedHit[]]>([
+    ["helper", [{ path: "helper.ts", kind: "file" }]],
+    ["elper", [{ path: "helper.ts", kind: "file" }]],
+    ["greet", [{ path: "helper.ts", kind: "file" }]],
+    ["/nested", [{ path: "src/nested.ts", kind: "file" }]],
+    ["src", [{ path: "src", kind: "dir" }]],
+    [
+      "ts",
+      [
+        { path: "helper.ts", kind: "file" },
+        { path: "alpha_pair.ts", kind: "file" },
+        { path: "beta.ts", kind: "file" },
+        { path: "src/nested.ts", kind: "file" },
+      ],
+    ],
+  ])('search "%s"', (query, expected) => {
+    const hits = runSearch(asQueryAll(openFixture("search")), query)
+    expectHits(hits, expected)
   })
 
-  it("matches files by defined symbol display_name prefix", () => {
-    const db = openExplorer()
-    const hits = runSearch(asQueryAll(db), "greet")
+  it("orders by commit_time descending within the same rank", () => {
+    const hits = runSearch(asQueryAll(openFixture("search")), "ts")
 
-    db.close()
-
-    expect(hits.some((hit) => hit.path === "src/helper.ts")).toBe(true)
-    expect(hits.every((hit) => hit.name !== "greet" || hit.path === "src/helper.ts")).toBe(true)
-  })
-
-  it("matches files and dirs by relative_path substring when query contains /", () => {
-    const db = openExplorer()
-    const hits = runSearch(asQueryAll(db), "/helper.")
-
-    db.close()
-
-    expect(hits.some((hit) => hit.path === "src/helper.ts")).toBe(true)
-    expect(hits.every((hit) => hit.path.includes("/helper."))).toBe(true)
-  })
-
-  it("does not apply path substring when query has no slash", () => {
-    const db = openExplorer()
-    const hits = runSearch(asQueryAll(db), "src")
-
-    db.close()
-
-    expect(hits.some((hit) => hit.path === "src" && hit.kind === "dir")).toBe(true)
-    expect(hits.some((hit) => hit.path === "src/helper.ts")).toBe(false)
+    expect(paths(hits)).toEqual(["helper.ts", "alpha_pair.ts", "beta.ts", "src/nested.ts"])
+    expect(hits[0]?.commit_time).toBe(3_000)
+    expect(hits[1]?.commit_time).toBe(2_000)
+    expect(hits[2]?.commit_time).toBe(1_000)
+    expectDescendingCommitTimes(hits)
   })
 
   it("falls back from prefix to substring for a single token", () => {
-    const db = openExplorer()
-    const prefix = searchWith(db, ["elper"], "prefix", "and")
-    const fallback = runSearch(asQueryAll(db), "elper")
-
-    db.close()
-
-    expect(prefix).toHaveLength(0)
-    expect(fallback.some((hit) => hit.path === "src/helper.ts")).toBe(true)
-  })
-
-  it("orders hits by commit_time descending within the same rank", () => {
-    const readonly = openExplorer()
-    const dbPath = readonly.name
-    readonly.close()
-
-    const db = new Database(dbPath)
-    const older = db.prepare("SELECT sha, commit_time FROM commits LIMIT 1").get() as {
-      sha: string
-      commit_time: number
-    }
-    db.prepare(
-      `INSERT INTO commits (sha, commit_time, committer_email, message)
-       VALUES (?, ?, (SELECT committer_email FROM commits LIMIT 1), 'newer')`,
-    ).run("newer-sha", older.commit_time + 86_400)
-    db.prepare("UPDATE files SET commit_sha = ? WHERE relative_path = ?").run(
-      "newer-sha",
-      "src/app/handler.ts",
-    )
-
-    const hits = runSearch(asQueryAll(db), "handler")
-    db.close()
-
-    expect(hits.length).toBeGreaterThanOrEqual(2)
-    expect(hits[0].path).toBe("src/app/handler.ts")
-    expect(hits[0].commit_time).toBeGreaterThan(hits[1].commit_time ?? 0)
-    for (let i = 1; i < hits.length; i++) {
-      expect(hits[i].commit_time).toBeLessThanOrEqual(hits[i - 1].commit_time ?? 0)
-    }
+    expect(searchWith(["elper"], "prefix", "and")).toHaveLength(0)
+    const hits = runSearch(asQueryAll(openFixture("search")), "elper")
+    expectHits(hits, [{ path: "helper.ts", kind: "file" }])
   })
 
   it("uses AND across tokens before OR", () => {
-    const db = openExplorer()
-    const andHits = searchWith(db, ["helper", "ts"], "substring", "and")
-    const andMiss = searchWith(db, ["helper", "nope"], "substring", "and")
-    const orHits = searchWith(db, ["helper", "nope"], "substring", "or")
-    const fallback = runSearch(asQueryAll(db), "helper nope")
+    expect(searchWith(["alpha", "pair"], "substring", "and")).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "alpha_pair.ts" })]),
+    )
+    expect(searchWith(["alpha", "nope"], "substring", "and")).toHaveLength(0)
+    expect(searchWith(["alpha", "nope"], "substring", "or")).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "alpha_pair.ts" })]),
+    )
 
-    db.close()
-
-    expect(andHits.some((hit) => hit.path === "src/helper.ts")).toBe(true)
-    expect(andMiss).toHaveLength(0)
-    expect(orHits.some((hit) => hit.path === "src/helper.ts")).toBe(true)
-    expect(fallback.some((hit) => hit.path === "src/helper.ts")).toBe(true)
+    const hits = runSearch(asQueryAll(openFixture("search")), "alpha nope")
+    expect(paths(hits)).toEqual(["alpha_pair.ts"])
     expect(searchStrategies(["a", "b"]).length).toBe(4)
   })
 })

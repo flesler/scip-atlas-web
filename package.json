@@ -7,6 +7,7 @@
     "pack": "tsx bin/pack.ts",
     "build": "vite build",
     "dev": "vite",
+    "bootstrap:fixtures": "tsx tests/fixtures/bootstrap.ts",
     "test": "vitest run",
     "test:ui": "playwright test",
     "dump-ui": "tsx bin/dump-ui.ts",

@@ -1,20 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import { renderTreeDepth } from "../src/render-tree.js"
 import { ROOT_TREE_KEY, listTree, treeCacheKey } from "../src/tree.js"
-import { asQueryAll, cleanupExplorerFixtures, openExplorer, queryAll } from "./open-explorer.js"
-
-afterEach(() => {
-  cleanupExplorerFixtures()
-})
+import { asQueryAll, openExplorer, queryAll } from "./open-explorer.js"
 
 describe("listTree", () => {
   it("distinguishes roots from children of repo root", () => {
-    const db = openExplorer()
-    const query = asQueryAll(db)
+    const query = asQueryAll(openExplorer())
     const roots = listTree(query, null)
     const repoChildren = listTree(query, "")
-
-    db.close()
 
     expect(roots.some((node) => node.path === "")).toBe(false)
     expect(roots.some((node) => node.path === "src")).toBe(true)
@@ -35,8 +28,6 @@ describe("listTree", () => {
     ).map((row) => row.relative_path)
     const srcFiles = listTree(query, "src").filter((node) => node.kind === "file")
 
-    db.close()
-
     expect(srcFiles.map((node) => node.path)).toEqual(expected)
     expect(srcFiles.length).toBeGreaterThan(0)
   })
@@ -54,7 +45,6 @@ describe("listTree", () => {
       treeCache: cache,
     }
 
-    db.close()
     expect(() => renderTreeDepth(state, null)).not.toThrow()
     expect(renderTreeDepth(state, null)).toBeLessThan(10)
   })

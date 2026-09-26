@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import {
   flattenInspectTableNames,
   groupInspectTables,
@@ -6,28 +6,18 @@ import {
   tableRows,
   tableSchema,
 } from "../src/inspect.js"
-import { asQueryAll, cleanupExplorerFixtures, openExplorer } from "./open-explorer.js"
-
-afterEach(() => {
-  cleanupExplorerFixtures()
-})
+import { asQueryAll, openExplorer } from "./open-explorer.js"
 
 describe("inspect", () => {
   it("lists atlas and scip tables from explorer.db", () => {
-    const db = openExplorer()
-    const tables = listTables(asQueryAll(db))
-    db.close()
-
+    const tables = listTables(asQueryAll(openExplorer()))
     expect(tables.some((table) => table.name === "files")).toBe(true)
     expect(tables.some((table) => table.name === "committers")).toBe(true)
     expect(tables.some((table) => table.name === "documents")).toBe(true)
   })
 
   it("groups tables into scip-cli, scip-atlas, and other", () => {
-    const db = openExplorer()
-    const groups = groupInspectTables(listTables(asQueryAll(db)))
-    db.close()
-
+    const groups = groupInspectTables(listTables(asQueryAll(openExplorer())))
     const byId = new Map(groups.map((group) => [group.id, group.tables.map((table) => table.name)]))
     expect(byId.get("scip-cli")).toEqual(
       expect.arrayContaining(["documents", "mentions", "chunks", "global_symbols", "defn_enclosing_ranges"]),
@@ -52,12 +42,10 @@ describe("inspect", () => {
   })
 
   it("returns schema and rows with NULL rendered explicitly", () => {
-    const db = openExplorer()
-    const query = asQueryAll(db)
+    const query = asQueryAll(openExplorer())
     const allowed = new Set(listTables(query).map((table) => table.name))
     const schema = tableSchema(query, "files", allowed)
     const rows = tableRows(query, "files", allowed, 5, 0)
-    db.close()
 
     expect(schema.some((column) => column.name === "summary")).toBe(true)
     expect(rows.columns).toContain("summary")
