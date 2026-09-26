@@ -57,6 +57,7 @@ export type SearchHit = {
   kind: "file" | "dir";
   name: string;
   summary: string | null
+  commit_time: number | null
 };
 
 export type RemoteInfo = {

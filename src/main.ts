@@ -818,6 +818,13 @@ function renderSearchResultsList(container: HTMLElement, hits: SearchHit[]) {
     path.textContent = hit.path
     row.appendChild(path)
 
+    if (hit.commit_time) {
+      const time = document.createElement("span")
+      time.className = "search-result-time"
+      time.textContent = formatTime(hit.commit_time)
+      row.appendChild(time)
+    }
+
     if (hit.summary) {
       const summary = document.createElement("span")
       summary.className = "search-result-summary"

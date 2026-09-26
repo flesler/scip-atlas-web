@@ -59,25 +59,28 @@ export function buildSearchQuery(
   const symbols = symbolClauses(tokens, style, combine)
 
   const sql = `
-    SELECT path, name, kind, summary
+    SELECT path, name, kind, summary, MAX(commit_time) AS commit_time
     FROM (
-      SELECT relative_path AS path, name, 'file' AS kind, summary, 0 AS rank
-      FROM files
+      SELECT f.relative_path AS path, f.name, 'file' AS kind, f.summary, 0 AS rank, c.commit_time
+      FROM files f
+      LEFT JOIN commits c ON c.sha = f.commit_sha
       WHERE ${files.clause}
       UNION ALL
-      SELECT relative_path AS path, name, 'dir' AS kind, summary, 0 AS rank
-      FROM dirs
+      SELECT d.relative_path AS path, d.name, 'dir' AS kind, d.summary, 0 AS rank, c.commit_time
+      FROM dirs d
+      LEFT JOIN commits c ON c.sha = d.commit_sha
       WHERE ${dirs.clause}
       UNION ALL
-      SELECT f.relative_path AS path, f.name, 'file' AS kind, f.summary, 1 AS rank
+      SELECT f.relative_path AS path, f.name, 'file' AS kind, f.summary, 1 AS rank, c.commit_time
       FROM global_symbols gs
       JOIN defn_enclosing_ranges der ON der.symbol_id = gs.id
       JOIN documents d ON der.document_id = d.id
       JOIN files f ON f.relative_path = d.relative_path
+      LEFT JOIN commits c ON c.sha = f.commit_sha
       WHERE ${symbols.clause}
     )
     GROUP BY path, kind
-    ORDER BY MIN(rank), CASE kind WHEN 'file' THEN 0 ELSE 1 END, path
+    ORDER BY MIN(rank), commit_time DESC, CASE kind WHEN 'file' THEN 0 ELSE 1 END, path
     LIMIT 50
   `
 

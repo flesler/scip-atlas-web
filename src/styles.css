@@ -440,6 +440,13 @@ body {
   max-width: 100%;
 }
 
+.search-result-time {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .search-result-summary {
   flex: 1 1 100%;
   color: var(--muted);

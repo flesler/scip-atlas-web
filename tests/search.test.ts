@@ -1,3 +1,4 @@
+import Database from "better-sqlite3"
 import { afterEach, describe, expect, it } from "vitest"
 import {
   buildSearchQuery,
@@ -79,6 +80,36 @@ describe("search SQL", () => {
 
     expect(prefix).toHaveLength(0)
     expect(fallback.some((hit) => hit.path === "src/helper.ts")).toBe(true)
+  })
+
+  it("orders hits by commit_time descending within the same rank", () => {
+    const readonly = openExplorer()
+    const dbPath = readonly.name
+    readonly.close()
+
+    const db = new Database(dbPath)
+    const older = db.prepare("SELECT sha, commit_time FROM commits LIMIT 1").get() as {
+      sha: string
+      commit_time: number
+    }
+    db.prepare(
+      `INSERT INTO commits (sha, commit_time, committer_email, message)
+       VALUES (?, ?, (SELECT committer_email FROM commits LIMIT 1), 'newer')`,
+    ).run("newer-sha", older.commit_time + 86_400)
+    db.prepare("UPDATE files SET commit_sha = ? WHERE relative_path = ?").run(
+      "newer-sha",
+      "src/app/handler.ts",
+    )
+
+    const hits = runSearch(asQueryAll(db), "handler")
+    db.close()
+
+    expect(hits.length).toBeGreaterThanOrEqual(2)
+    expect(hits[0].path).toBe("src/app/handler.ts")
+    expect(hits[0].commit_time).toBeGreaterThan(hits[1].commit_time ?? 0)
+    for (let i = 1; i < hits.length; i++) {
+      expect(hits[i].commit_time).toBeLessThanOrEqual(hits[i - 1].commit_time ?? 0)
+    }
   })
 
   it("uses AND across tokens before OR", () => {
