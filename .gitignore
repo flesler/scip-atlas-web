@@ -7,3 +7,4 @@ playwright-report/
 *.db-shm
 *.db-wal
 tmp/
+tests/fixtures/explorer.db

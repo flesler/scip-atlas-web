@@ -1,5 +1,12 @@
+import type { QueryAll } from "./tree.js"
+import type { SearchHit } from "./types.js"
+
 export type SearchMatchStyle = "prefix" | "substring"
 export type SearchTokenCombine = "and" | "or"
+
+export function parseSearchTokens(query: string): string[] {
+  return query.trim().split(/\s+/).filter(Boolean)
+}
 
 function likePattern(style: SearchMatchStyle, token: string): string {
   if (style === "prefix") {
@@ -93,4 +100,19 @@ export function searchStrategies(tokens: string[]): Array<{
     { style: "prefix", combine: "or" },
     { style: "substring", combine: "or" },
   ]
+}
+
+export function runSearch(queryAll: QueryAll, query: string): SearchHit[] {
+  const tokens = parseSearchTokens(query)
+  if (!tokens.length) {
+    return []
+  }
+  for (const strategy of searchStrategies(tokens)) {
+    const { sql, binds } = buildSearchQuery(tokens, strategy.style, strategy.combine)
+    const hits = queryAll<SearchHit>(sql, ...binds)
+    if (hits.length) {
+      return hits
+    }
+  }
+  return []
 }

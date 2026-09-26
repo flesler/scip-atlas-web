@@ -1,0 +1,35 @@
+import { SQL } from "./queries.js"
+import type { QueryAll } from "./tree.js"
+import type { PathDetails, SymbolRow } from "./types.js"
+
+export function fetchPathDetails(
+  queryAll: QueryAll,
+  pathValue: string,
+  mentionsPresent: boolean,
+): PathDetails {
+  const fileOverlay = queryAll<{
+    author_name: string
+    commit_time: number
+    message: string
+    summary: string | null
+  }>(SQL.fileOverlay, pathValue)[0]
+  if (!fileOverlay) {
+    throw new Error(`not a file: ${pathValue}`)
+  }
+
+  const overlay = {
+    author_name: fileOverlay.author_name,
+    commit_time: fileOverlay.commit_time,
+    message: fileOverlay.message,
+    summary: fileOverlay.summary,
+  }
+
+  const symbols = queryAll<SymbolRow>(SQL.definedSymbols, pathValue)
+
+  if (!mentionsPresent) {
+    throw new Error("mentions table missing; run pack / rebuild")
+  }
+  const deps = queryAll<{ relative_path: string }>(SQL.deps, pathValue, pathValue).map((row) => row.relative_path)
+  const rdeps = queryAll<{ relative_path: string }>(SQL.rdeps, pathValue, pathValue).map((row) => row.relative_path)
+  return { path: pathValue, kind: "file", overlay, symbols, deps, rdeps }
+}

@@ -2,11 +2,13 @@
 import sqlite3InitModule, { type Database, type Sqlite3Static } from "@sqlite.org/sqlite-wasm"
 import sqlite3Wasm from "@sqlite.org/sqlite-wasm/sqlite3.wasm?url"
 import { maybeDecompress } from "./decompress.js"
+import { detectExplorerMode, validateExplorerDb } from "./explorer-schema.js"
 import { listAllowedTables, listTables, tableRows, tableSchema, type QueryAll } from "./inspect.js"
+import { fetchPathDetails } from "./path-details.js"
 import { SQL } from "./queries.js"
-import { buildSearchQuery, searchStrategies } from "./search-query.js"
+import { runSearch } from "./search-query.js"
 import { listTree } from "./tree.js"
-import type { HealthInfo, PathDetails, SearchHit, SymbolRow, WorkerRequest, WorkerResponse } from "./types.js"
+import type { HealthInfo, PathDetails, WorkerRequest, WorkerResponse } from "./types.js"
 
 let db: Database | null = null;
 let sqlite3: Sqlite3Static | null = null;
@@ -54,36 +56,15 @@ function tableNames(conn: Database): string[] {
   return queryAll<{ name: string }>(conn, SQL.tableNames).map((row) => row.name);
 }
 
-function detectMode(conn: Database): HealthInfo["mode"] {
-  const tables = new Set(tableNames(conn));
-  if (tables.has("files") && tables.has("committers") && tables.has("documents")) {
-    return "explorer";
-  }
-  return "invalid";
-}
-
-function rejectFullIndex(conn: Database) {
-  const cols = queryAll<{ name: string }>(conn, SQL.chunkColumns).map((row) => row.name);
-  if (cols.includes("occurrences")) {
-    throw new Error("full index.db detected; run pack to build explorer.db");
-  }
-}
 
 async function loadDatabase(bytes: ArrayBuffer, fileName: string) {
   const module = await getSqlite3();
   const raw = await maybeDecompress(bytes, fileName);
   const conn = openFromBuffer(module, new Uint8Array(raw));
-  rejectFullIndex(conn);
-
   const tables = new Set(tableNames(conn));
-  if (!tables.has("files") || !tables.has("committers") || !tables.has("commits")) {
-    throw new Error("expected explorer.db from pack");
-  }
-
-  const resolvedMode = detectMode(conn);
-  if (resolvedMode === "invalid") {
-    throw new Error("expected explorer.db from pack");
-  }
+  const chunkColumns = queryAll<{ name: string }>(conn, SQL.chunkColumns).map((row) => row.name);
+  validateExplorerDb(tables, chunkColumns);
+  const resolvedMode = detectExplorerMode(tables);
 
   db = conn;
   loadedBytes = raw.byteLength;
@@ -100,35 +81,11 @@ function tree(parent: string | null) {
 }
 
 function node(pathValue: string): PathDetails {
-  if (!db) {
+  const conn = db
+  if (!conn) {
     throw new Error("no database loaded")
   }
-  const fileOverlay = queryAll<{
-    author_name: string
-    commit_time: number
-    message: string
-    summary: string | null;
-  }>(db, SQL.fileOverlay, pathValue)[0]
-  if (!fileOverlay) {
-    throw new Error(`not a file: ${pathValue}`)
-  }
-
-  const kind = "file" as const
-  const overlay = {
-    author_name: fileOverlay.author_name,
-    commit_time: fileOverlay.commit_time,
-    message: fileOverlay.message,
-    summary: fileOverlay.summary,
-  }
-
-  const symbols = queryAll<SymbolRow>(db, SQL.definedSymbols, pathValue)
-
-  if (!mentionsPresent) {
-    throw new Error("mentions table missing; run pack / rebuild");
-  }
-  const deps = queryAll<{ relative_path: string }>(db, SQL.deps, pathValue, pathValue).map((row) => row.relative_path)
-  const rdeps = queryAll<{ relative_path: string }>(db, SQL.rdeps, pathValue, pathValue).map((row) => row.relative_path)
-  return { path: pathValue, kind, overlay, symbols, deps, rdeps }
+  return fetchPathDetails((sql, ...bind) => queryAll(conn, sql, ...bind), pathValue, mentionsPresent)
 }
 
 function inspectQueryAll(): QueryAll {
@@ -149,22 +106,12 @@ function inspectRows(table: string, offset = 0, limit = 100) {
   return tableRows(inspectQueryAll(), table, allowed, limit, offset)
 }
 
-function search(query: string): SearchHit[] {
-  if (!db) {
+function search(query: string) {
+  const conn = db
+  if (!conn) {
     return [];
   }
-  const tokens = query.trim().split(/\s+/).filter(Boolean)
-  if (!tokens.length) {
-    return [];
-  }
-  for (const strategy of searchStrategies(tokens)) {
-    const { sql, binds } = buildSearchQuery(tokens, strategy.style, strategy.combine)
-    const hits = queryAll<SearchHit>(db, sql, ...binds)
-    if (hits.length) {
-      return hits
-    }
-  }
-  return []
+  return runSearch((sql, ...bind) => queryAll(conn, sql, ...bind), query)
 }
 
 function health(): HealthInfo {

@@ -16,6 +16,7 @@ import {
   indexName
 } from "../bin/pack/slim.js"
 import { planGlobalSymbolPack } from "../bin/pack/symbols.js"
+import { SQL } from "../src/queries.js"
 
 const FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const INDEX_PATH = path.join(FIXTURE_DIR, "index.db");
@@ -34,29 +35,6 @@ afterEach(() => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
-
-const RDEP_SQL = `
-  SELECT DISTINCT d.relative_path
-  FROM mentions m
-  JOIN chunks c ON m.chunk_id = c.id
-  JOIN documents d ON c.document_id = d.id
-  JOIN defn_enclosing_ranges der ON der.symbol_id = m.symbol_id
-  JOIN documents def_d ON der.document_id = def_d.id
-  WHERE m.role != 1 AND def_d.relative_path = ? AND d.relative_path != ?
-  ORDER BY d.relative_path
-`;
-
-const DEPS_SQL = `
-  SELECT DISTINCT def_d.relative_path
-  FROM mentions m
-  JOIN chunks c ON m.chunk_id = c.id
-  JOIN defn_enclosing_ranges der ON der.symbol_id = m.symbol_id
-  JOIN documents def_d ON der.document_id = def_d.id
-  WHERE c.document_id = (SELECT id FROM documents WHERE relative_path = ?)
-    AND m.role != 1
-    AND def_d.relative_path != ?
-  ORDER BY def_d.relative_path
-`;
 
 describe("pack explorer SQL helpers", () => {
   it("derives index names and DDL from config", () => {
@@ -191,8 +169,8 @@ describe("buildExplorerDb", () => {
     const filePath = "src/helper.ts"
     const full = new Database(INDEX_PATH, { readonly: true })
     const packed = new Database(output, { readonly: true })
-    const fullRows = full.prepare(DEPS_SQL).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path)
-    const packedRows = packed.prepare(DEPS_SQL).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path)
+    const fullRows = full.prepare(SQL.deps).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path)
+    const packedRows = packed.prepare(SQL.deps).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path)
     full.close()
     packed.close()
     expect(packedRows).toEqual(fullRows)
@@ -205,8 +183,8 @@ describe("buildExplorerDb", () => {
     const filePath = "src/helper.ts";
     const full = new Database(INDEX_PATH, { readonly: true });
     const packed = new Database(output, { readonly: true });
-    const fullRows = full.prepare(RDEP_SQL).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path);
-    const packedRows = packed.prepare(RDEP_SQL).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path);
+    const fullRows = full.prepare(SQL.rdeps).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path);
+    const packedRows = packed.prepare(SQL.rdeps).all(filePath, filePath).map((row) => (row as { relative_path: string }).relative_path);
     full.close();
     packed.close();
     expect(packedRows).toEqual(fullRows);
