@@ -13,6 +13,7 @@ export function fetchPathDetails(
     commit_time: number
     message: string
     summary: string | null
+    commit_sha: string
   }>(SQL.fileOverlay, pathValue)[0]
   if (!fileOverlay) {
     throw new Error(`not a file: ${pathValue}`)
@@ -23,6 +24,7 @@ export function fetchPathDetails(
     commit_time: fileOverlay.commit_time,
     message: fileOverlay.message,
     summary: fileOverlay.summary,
+    commit_sha: fileOverlay.commit_sha,
   }
 
   const symbols = queryAll<SymbolRow>(SQL.definedSymbols, pathValue)

@@ -16,6 +16,7 @@ describe("fetchPathDetails", () => {
     expect(details.kind).toBe("file")
     expect(details.path).toBe("src/helper.ts")
     expect(details.overlay?.message).toBe("initial commit")
+    expect(details.overlay?.commit_sha).toBeTruthy()
     expect(details.symbols.some((row) => row.display_name === "greet")).toBe(true)
     expect(details.owners).toEqual(["@acme/core", "@acme/tooling"])
     expect(details.deps).toEqual([])

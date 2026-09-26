@@ -6,9 +6,10 @@ import { detectExplorerMode, validateExplorerDb } from "./explorer-schema.js"
 import { listAllowedTables, listTables, tableRows, tableSchema, type QueryAll } from "./inspect.js"
 import { fetchPathDetails } from "./path-details.js"
 import { SQL } from "./queries.js"
+import { remoteFromMetaRow } from "./remote-links.js"
 import { runSearch } from "./search-query.js"
 import { listTree } from "./tree.js"
-import type { HealthInfo, PathDetails, WorkerRequest, WorkerResponse } from "./types.js"
+import type { HealthInfo, PathDetails, RemoteInfo, WorkerRequest, WorkerResponse } from "./types.js"
 
 let db: Database | null = null;
 let sqlite3: Sqlite3Static | null = null;
@@ -17,6 +18,7 @@ let loadedName: string | null = null;
 let mode: HealthInfo["mode"] = "invalid";
 let mentionsPresent = false;
 let ownersPresent = false;
+let remote: RemoteInfo | null = null;
 
 async function getSqlite3(): Promise<Sqlite3Static> {
   if (!sqlite3) {
@@ -72,6 +74,14 @@ async function loadDatabase(bytes: ArrayBuffer, fileName: string) {
   loadedName = fileName;
   mentionsPresent = tables.has("mentions");
   ownersPresent = tables.has("file_owners") && tables.has("owners");
+  remote = tables.has("meta")
+    ? remoteFromMetaRow(queryAll(conn, SQL.remoteMeta)[0] as {
+        git_head?: string | null
+        github_host?: string | null
+        github_owner?: string | null
+        github_repo?: string | null
+      })
+    : null;
   mode = resolvedMode;
 }
 
@@ -125,6 +135,7 @@ function health(): HealthInfo {
     mode,
     mentionsPresent,
     ownersPresent,
+    remote,
   };
 }
 

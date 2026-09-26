@@ -5,7 +5,7 @@ Checked-in inputs for pack/SPA tests. **Not a real repo** — a minimal syntheti
 | File | Source | Role |
 | --- | --- | --- |
 | `index.db` | scip-cli reindex on fake `src/**` tree | Full SCIP graph (37 files, deps/rdeps) |
-| `atlas.db` | scip-atlas sync on same tree | Overlay: `files`, `dirs`, `commits`, `committers`, `owners`, `file_owners` (no summaries) |
+| `atlas.db` | scip-atlas sync on same tree | Overlay: `files`, `dirs`, `commits`, `committers`, `owners`, `file_owners`, `meta` (no summaries) |
 
 Tests call `buildExplorerDb()` at runtime; `explorer.db` is never committed.
 

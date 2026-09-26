@@ -27,12 +27,17 @@ export const SQL = {
     ORDER BY f.relative_path
   `,
   fileOverlay: `
-    SELECT f.relative_path, f.summary,
+    SELECT f.relative_path, f.summary, f.commit_sha,
            ct.name AS author_name, c.commit_time, c.message
     FROM files f
     JOIN commits c ON c.sha = f.commit_sha
     JOIN committers ct ON ct.email = c.committer_email
     WHERE f.relative_path = ?
+  `,
+  remoteMeta: `
+    SELECT git_head, github_host, github_owner, github_repo
+    FROM meta
+    WHERE id = 1
   `,
   definedSymbols: `
     SELECT gs.display_name, der.start_line, der.end_line

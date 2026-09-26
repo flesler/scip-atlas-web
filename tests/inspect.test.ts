@@ -33,7 +33,7 @@ describe("inspect", () => {
       expect.arrayContaining(["documents", "mentions", "chunks", "global_symbols", "defn_enclosing_ranges"]),
     )
     expect(byId.get("scip-atlas")).toEqual(
-      expect.arrayContaining(["committers", "commits", "files", "dirs", "owners", "file_owners"]),
+      expect.arrayContaining(["committers", "commits", "files", "dirs", "owners", "file_owners", "meta"]),
     )
     expect(byId.has("other")).toBe(false)
   })

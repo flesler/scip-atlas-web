@@ -10,6 +10,7 @@ import {
 import { canDownloadApp, downloadApp } from "./download.js"
 import { joinMeta } from "./format.js"
 import { flattenInspectTableNames, groupInspectTables } from "./inspect.js"
+import { commitUrl, fileBlobUrl, resolveBlobRef } from "./remote-links.js"
 import {
   mountShortcutsFab,
   mountShortcutsInline,
@@ -19,7 +20,7 @@ import {
 import "./styles.css"
 import { createTreeIcon } from "./tree-icons.js"
 import { ROOT_TREE_KEY, treeCacheKey } from "./tree.js"
-import type { PathDetails, SearchHit, TreeNode, ViewMode } from "./types.js"
+import type { PathDetails, RemoteInfo, SearchHit, TreeNode, ViewMode } from "./types.js"
 import { renderDbDetails, renderDbTableList } from "./ui-db.js"
 import DbWorker from "./worker.ts?worker&inline"
 
@@ -45,6 +46,7 @@ const state = {
   error: "",
   shortcutsOpen: false,
   shortcutsHover: false,
+  remote: null as RemoteInfo | null,
 };
 
 initDbClient(new DbWorker());
@@ -623,29 +625,80 @@ function renderTreeNodes(parent: string | null, container: HTMLElement, seen = n
   }
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+}
+
+function fileExternalUrl(details: PathDetails): string | null {
+  if (!state.remote || !details.overlay) {
+    return null
+  }
+  const ref = resolveBlobRef(state.remote, details.overlay.commit_sha)
+  if (!ref) {
+    return null
+  }
+  return fileBlobUrl(state.remote, details.path, ref)
+}
+
+function renderDetailMeta(details: PathDetails): string {
+  const overlay = details.overlay
+  if (!overlay) {
+    return ""
+  }
+  const text = joinMeta([overlay.author_name, formatTime(overlay.commit_time), overlay.message])
+  if (!text) {
+    return ""
+  }
+  const escaped = escapeHtml(text)
+  if (!state.remote || !overlay.commit_sha) {
+    return `<p class="meta">${escaped}</p>`
+  }
+  const url = commitUrl(state.remote, overlay.commit_sha)
+  return `<p class="meta"><a class="detail-meta-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escaped}</a></p>`
+}
+
+function renderDetailTitle(details: PathDetails): string {
+  const path = escapeHtml(details.path)
+  const url = fileExternalUrl(details)
+  if (!url) {
+    return `<h2>${path}</h2>`
+  }
+  const label = state.remote?.host.includes("gitlab") ? "Open on GitLab" : "Open on GitHub"
+  return `<h2><a class="detail-title-link" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="${label}">${path}</a></h2>`
+}
+
+function renderSymbolItem(details: PathDetails, symbol: PathDetails["symbols"][number]): string {
+  const range = `<span class="meta">${formatSymbolRange(symbol.start_line, symbol.end_line)}</span>`
+  if (!state.remote || !details.overlay) {
+    return `<li>${escapeHtml(symbol.display_name)} ${range}</li>`
+  }
+  const ref = resolveBlobRef(state.remote, details.overlay.commit_sha)
+  if (!ref) {
+    return `<li>${escapeHtml(symbol.display_name)} ${range}</li>`
+  }
+  const url = fileBlobUrl(state.remote, details.path, ref, symbol.start_line, symbol.end_line)
+  return `<li><a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(symbol.display_name)}</a> ${range}</li>`
+}
+
 function renderDetails(details: PathDetails) {
   const overlay = details.overlay;
-  const meta = overlay
-    ? joinMeta([overlay.author_name, formatTime(overlay.commit_time), overlay.message])
-    : "";
   detailPanel.innerHTML = `
     <div class="detail-header">
-      <h2>${details.path}</h2>
+      ${renderDetailTitle(details)}
       <button type="button" class="detail-close" aria-label="Close file panel" title="Close file details and expand the tree to full width.">×</button>
     </div>
-    ${meta ? `<p class="meta">${meta}</p>` : ""}
+    ${renderDetailMeta(details)}
     ${overlay?.summary ? `<p>${overlay.summary}</p>` : ""}
     ${details.owners.length ? `<section class="section"><h3>Owners</h3>${renderOwnerList(details.owners)}</section>` : ""}
     <section class="section">
       <h3>Defined symbols</h3>
       ${
         details.symbols.length
-          ? `<ul class="link-list">${details.symbols
-              .map(
-                (symbol) =>
-                  `<li>${symbol.display_name} <span class="meta">${formatSymbolRange(symbol.start_line, symbol.end_line)}</span></li>`,
-              )
-              .join("")}</ul>`
+    ? `<ul class="link-list">${details.symbols.map((symbol) => renderSymbolItem(details, symbol)).join("")}</ul>`
           : `<p class="meta">No symbols indexed for this file.</p>`
       }
     </section>
@@ -981,8 +1034,9 @@ async function handleFile(file: File) {
     throw new Error("load explorer.db, not -wal or -shm sidecars");
   }
   const bytes = await file.arrayBuffer();
-  await loadDatabase(bytes, file.name);
+  const health = await loadDatabase(bytes, file.name);
   state.loaded = true;
+  state.remote = health.remote;
   state.treeCache.clear();
   state.inspectTables = [];
   state.expanded.clear();
@@ -1177,6 +1231,7 @@ void fetchHealth()
   .then((health) => {
     if (health.loaded) {
       state.loaded = true
+      state.remote = health.remote
       state.shortcutsOpen = false
       state.shortcutsHover = false
     }

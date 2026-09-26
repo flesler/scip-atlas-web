@@ -104,7 +104,7 @@ describe("buildExplorerDb", () => {
     for (const name of required) {
       expect(tables.has(name)).toBe(true);
     }
-    expect(tables.has("meta")).toBe(false)
+    expect(tables.has("meta")).toBe(true)
     expect(tables.has("search_docs")).toBe(false)
     expect(tables.has("search_docs_fts")).toBe(false);
     expect(chunkCols.has("occurrences")).toBe(false);
@@ -194,6 +194,23 @@ describe("buildExplorerDb", () => {
     packed.close();
     expect(packedRows).toEqual(fullRows);
   });
+
+  it("copies meta github identity when present in atlas", () => {
+    const output = makeOutput()
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
+
+    const packed = new Database(output, { readonly: true })
+    const meta = packed.prepare("SELECT github_host, github_owner, github_repo FROM meta WHERE id = 1").get() as {
+      github_host: string
+      github_owner: string
+      github_repo: string
+    }
+    packed.close()
+
+    expect(meta.github_host).toBe("github.com")
+    expect(meta.github_owner).toBe("acme")
+    expect(meta.github_repo).toBe("sample-app")
+  })
 
   it("copies codeowners tables when present in atlas", () => {
     const output = makeOutput()

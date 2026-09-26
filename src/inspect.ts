@@ -29,6 +29,7 @@ const SCIP_CLI_TABLES = new Set(EXPLORER_SCIP_TABLES.map((table) => table.name))
 const SCIP_ATLAS_TABLES = new Set([
   ...EXPLORER_ATLAS_TABLES.map((table) => table.name),
   ...EXPLORER_ATLAS_OPTIONAL_TABLES.map((table) => table.name),
+  "meta",
 ]);
 
 export type InspectTableGroup = {

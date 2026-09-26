@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { gzipSync } from "node:zlib"
 import { checkpointAtlas, finalizeExplorer, formatSummaryWarning, missingSummaryCoverages } from "./atlas.js"
+import { copyMetaIfPresent } from "./meta.js"
 import { compressedOutputPath, explorerDbPath, type ResolvedPaths } from "./paths.js"
 import {
   EXPLORER_ATLAS_INDEXES,
@@ -132,6 +133,8 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
       main.exec(createTableSql(table, specs))
       main.exec(copyTableSql(table, "atlas"))
     }
+
+    copyMetaIfPresent(main, atlas, atlasTables.has("meta"))
 
     const summaryWarning = formatSummaryWarning(missingSummaryCoverages(atlas))
     if (summaryWarning) {

@@ -15,6 +15,7 @@ export type OverlayInfo = {
   commit_time: number;
   message: string;
   summary: string | null;
+  commit_sha: string;
 };
 
 export type PathDetails = {
@@ -58,6 +59,13 @@ export type SearchHit = {
   summary: string | null
 };
 
+export type RemoteInfo = {
+  host: string;
+  owner: string;
+  repo: string;
+  gitHead: string | null;
+};
+
 export type HealthInfo = {
   loaded: boolean;
   fileName: string | null;
@@ -66,6 +74,7 @@ export type HealthInfo = {
   mode: "explorer" | "invalid";
   mentionsPresent: boolean;
   ownersPresent: boolean;
+  remote: RemoteInfo | null;
 };
 
 export type ViewMode = "explorer" | "db";

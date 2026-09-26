@@ -197,6 +197,15 @@ body {
   background: var(--panel);
 }
 
+.link-list a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.link-list a:hover {
+  text-decoration: underline;
+}
+
 .detail-header {
   display: flex;
   align-items: flex-start;
@@ -209,6 +218,17 @@ body {
   min-width: 0;
   flex: 1;
   word-break: break-word;
+}
+
+.detail-title-link,
+.detail-meta-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.detail-title-link:hover,
+.detail-meta-link:hover {
+  text-decoration: underline;
 }
 
 .detail-close {
