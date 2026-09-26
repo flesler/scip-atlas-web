@@ -4,7 +4,14 @@ import path from "node:path"
 import { gzipSync } from "node:zlib"
 import { checkpointAtlas, finalizeExplorer, formatSummaryWarning, missingSummaryCoverages } from "./atlas.js"
 import { compressedOutputPath, explorerDbPath, type ResolvedPaths } from "./paths.js"
-import { EXPLORER_ATLAS_INDEXES, EXPLORER_ATLAS_TABLES, EXPLORER_SCIP_INDEXES, EXPLORER_SCIP_TABLES } from "./schema.js"
+import {
+  EXPLORER_ATLAS_INDEXES,
+  EXPLORER_ATLAS_OPTIONAL_INDEXES,
+  EXPLORER_ATLAS_OPTIONAL_TABLES,
+  EXPLORER_ATLAS_TABLES,
+  EXPLORER_SCIP_INDEXES,
+  EXPLORER_SCIP_TABLES,
+} from "./schema.js"
 import {
   PackError,
   columnSpecs,
@@ -117,6 +124,15 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
       main.exec(copyTableSql(table, "atlas"))
     }
 
+    for (const table of EXPLORER_ATLAS_OPTIONAL_TABLES) {
+      if (!atlasTables.has(table.name)) {
+        continue
+      }
+      const specs = columnSpecs({ pragma: atlasPragma }, table)
+      main.exec(createTableSql(table, specs))
+      main.exec(copyTableSql(table, "atlas"))
+    }
+
     const summaryWarning = formatSummaryWarning(missingSummaryCoverages(atlas))
     if (summaryWarning) {
       console.warn(summaryWarning)
@@ -126,6 +142,12 @@ export function buildExplorerDb(paths: ResolvedPaths, options: BuildExplorerOpti
       main.exec(createIndexSql(index));
     }
     for (const index of EXPLORER_ATLAS_INDEXES) {
+      main.exec(createIndexSql(index));
+    }
+    for (const index of EXPLORER_ATLAS_OPTIONAL_INDEXES) {
+      if (!atlasTables.has(index.table)) {
+        continue
+      }
       main.exec(createIndexSql(index));
     }
 

@@ -7,7 +7,12 @@ import { gunzipSync } from "node:zlib"
 import { afterEach, describe, expect, it } from "vitest"
 import { formatSummaryWarning, missingSummaryCoverages } from "../bin/pack/atlas.js"
 import { buildExplorerDb } from "../bin/pack/build.js"
-import { EXPLORER_ATLAS_TABLES, EXPLORER_SCIP_INDEXES, EXPLORER_SCIP_TABLES } from "../bin/pack/schema.js"
+import {
+  EXPLORER_ATLAS_OPTIONAL_TABLES,
+  EXPLORER_ATLAS_TABLES,
+  EXPLORER_SCIP_INDEXES,
+  EXPLORER_SCIP_TABLES,
+} from "../bin/pack/schema.js"
 import {
   PackError,
   copyTableSql,
@@ -189,6 +194,45 @@ describe("buildExplorerDb", () => {
     packed.close();
     expect(packedRows).toEqual(fullRows);
   });
+
+  it("copies codeowners tables when present in atlas", () => {
+    const output = makeOutput()
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: ATLAS_PATH, outputPath: output })
+
+    const atlas = new Database(ATLAS_PATH, { readonly: true })
+    const packed = new Database(output, { readonly: true })
+    for (const table of EXPLORER_ATLAS_OPTIONAL_TABLES.map((row) => row.name)) {
+      const sourceCount = (atlas.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n
+      const packedCount = (packed.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n
+      expect(packedCount).toBe(sourceCount)
+    }
+    atlas.close()
+    packed.close()
+  })
+
+  it("packs without codeowners when atlas omits those tables", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scip-atlas-web-pack-no-owners-"))
+    tempDirs.push(dir)
+    const atlasCopy = path.join(dir, "atlas.db")
+    fs.copyFileSync(ATLAS_PATH, atlasCopy)
+    const atlas = new Database(atlasCopy)
+    atlas.exec("DROP TABLE file_owners; DROP TABLE owners;")
+    atlas.close()
+
+    const output = path.join(dir, "explorer.db")
+    buildExplorerDb({ repoPath: FIXTURE_DIR, indexPath: INDEX_PATH, atlasPath: atlasCopy, outputPath: output })
+
+    const packed = new Database(output, { readonly: true })
+    const tables = new Set(
+      (packed.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(
+        (row) => row.name,
+      ),
+    )
+    packed.close()
+
+    expect(tables.has("owners")).toBe(false)
+    expect(tables.has("file_owners")).toBe(false)
+  })
 
   it("copies atlas committers, commits, files, and dirs row counts", () => {
     const output = makeOutput();

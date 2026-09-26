@@ -66,6 +66,12 @@ export const SQL = {
       AND d.relative_path != ?
     ORDER BY d.relative_path
   `,
+  fileOwners: `
+    SELECT fo.owner_handle
+    FROM file_owners fo
+    WHERE fo.relative_path = ?
+    ORDER BY fo.owner_handle
+  `,
   tableNames: `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,
   chunkColumns: `PRAGMA table_info(chunks)`,
 } as const

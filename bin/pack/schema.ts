@@ -25,8 +25,18 @@ export const EXPLORER_ATLAS_TABLES: readonly PackTable[] = [
   { name: "dirs", columns: ["relative_path", "name", "parent_path", "commit_sha", "summary"] },
 ]
 
+/** Copied when present in atlas.db (older syncs omit codeowners). */
+export const EXPLORER_ATLAS_OPTIONAL_TABLES: readonly PackTable[] = [
+  { name: "owners", columns: ["handle"] },
+  { name: "file_owners", columns: ["relative_path", "owner_handle"] },
+]
+
 export const EXPLORER_ATLAS_INDEXES: readonly PackIndex[] = [
   { table: "files", columns: ["name"] },
   { table: "dirs", columns: ["name"] },
   { table: "dirs", columns: ["parent_path"] },
+]
+
+export const EXPLORER_ATLAS_OPTIONAL_INDEXES: readonly PackIndex[] = [
+  { table: "file_owners", columns: ["owner_handle"] },
 ]

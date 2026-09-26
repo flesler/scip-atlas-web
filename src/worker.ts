@@ -16,6 +16,7 @@ let loadedBytes = 0;
 let loadedName: string | null = null;
 let mode: HealthInfo["mode"] = "invalid";
 let mentionsPresent = false;
+let ownersPresent = false;
 
 async function getSqlite3(): Promise<Sqlite3Static> {
   if (!sqlite3) {
@@ -70,6 +71,7 @@ async function loadDatabase(bytes: ArrayBuffer, fileName: string) {
   loadedBytes = raw.byteLength;
   loadedName = fileName;
   mentionsPresent = tables.has("mentions");
+  ownersPresent = tables.has("file_owners") && tables.has("owners");
   mode = resolvedMode;
 }
 
@@ -85,7 +87,7 @@ function node(pathValue: string): PathDetails {
   if (!conn) {
     throw new Error("no database loaded")
   }
-  return fetchPathDetails((sql, ...bind) => queryAll(conn, sql, ...bind), pathValue, mentionsPresent)
+  return fetchPathDetails((sql, ...bind) => queryAll(conn, sql, ...bind), pathValue, mentionsPresent, ownersPresent)
 }
 
 function inspectQueryAll(): QueryAll {
@@ -122,6 +124,7 @@ function health(): HealthInfo {
     bytes: loadedBytes,
     mode,
     mentionsPresent,
+    ownersPresent,
   };
 }
 

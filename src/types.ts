@@ -22,6 +22,7 @@ export type PathDetails = {
   kind: "file" | "dir";
   overlay: OverlayInfo | null;
   symbols: SymbolRow[];
+  owners: string[];
   deps: string[];
   rdeps: string[];
 };
@@ -64,6 +65,7 @@ export type HealthInfo = {
   bytes: number;
   mode: "explorer" | "invalid";
   mentionsPresent: boolean;
+  ownersPresent: boolean;
 };
 
 export type ViewMode = "explorer" | "db";

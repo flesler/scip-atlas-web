@@ -65,7 +65,7 @@ app.innerHTML = `
         class="active"
         role="tab"
         aria-selected="true"
-        title="Browse the repo tree; select a file to see symbols, imports, and importers."
+        title="Browse the repo tree; select a file to see symbols, owners, imports, and importers."
         disabled
       >Explorer</button>
       <button
@@ -648,6 +648,7 @@ function renderDetails(details: PathDetails) {
           : `<p class="meta">No symbols indexed for this file.</p>`
       }
     </section>
+    ${details.owners.length ? `<section class="section"><h3>Owners</h3>${renderOwnerList(details.owners)}</section>` : ""}
     <section class="section">
       <h3>Imports</h3>
       ${renderPathList(details.deps)}
@@ -677,6 +678,10 @@ function renderPathList(paths: string[]): string {
   return `<ul class="link-list">${paths
     .map((path) => `<li><button type="button" data-path="${path}">${path}</button></li>`)
     .join("")}</ul>`;
+}
+
+function renderOwnerList(handles: string[]): string {
+  return `<ul class="owner-list">${handles.map((handle) => `<li>${handle}</li>`).join("")}</ul>`
 }
 
 function beginSearchIfNeeded() {
